@@ -59,6 +59,16 @@ type WriteOp struct {
 func BuildWriteOp(ev CDCEvent, schemaVersion int) (WriteOp, error) {
 	id := ev.Table + ":" + ev.PK
 
+	if ev.Op == OpDelete {
+		return WriteOp{
+			Kind: WriteOpDelete,
+			Filter: map[string]any{
+				"_id":       id,
+				"sourceLsn": map[string]any{"$lt": ev.LSN},
+			},
+		}, nil
+	}
+
 	set := make(map[string]any, len(ev.After)+2)
 	for k, v := range ev.After {
 		set[k] = v

@@ -71,3 +71,46 @@ func TestBuildWriteOp_InsertProducesLSNGatedUpsert(t *testing.T) {
 		t.Errorf("want $set.full_name=Alice, got %v", set["full_name"])
 	}
 }
+
+// Cycle 2: DELETE emits an LSN-gated DeleteOne. The filter uses $lt only
+// (no $exists:false branch) because deleting a row that was never present
+// is a no-op by construction — no need to match the absent-LSN case.
+// This prevents a replayed DELETE from removing a row that was subsequently
+// re-inserted under a higher LSN.
+func TestBuildWriteOp_DeleteProducesLSNGatedDelete(t *testing.T) {
+	ev := writer.CDCEvent{
+		Table: "users",
+		PK:    "42",
+		LSN:   2000,
+		Op:    writer.OpDelete,
+		Before: map[string]any{
+			"email": "alice@example.com",
+		},
+	}
+
+	op, err := writer.BuildWriteOp(ev, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if op.Kind != writer.WriteOpDelete {
+		t.Errorf("want Kind=WriteOpDelete, got %v", op.Kind)
+	}
+	if op.Upsert {
+		t.Errorf("want Upsert=false, got true")
+	}
+	if op.Update != nil {
+		t.Errorf("want Update=nil, got %v", op.Update)
+	}
+	if got, want := op.Filter["_id"], "users:42"; got != want {
+		t.Errorf("want Filter._id=%q, got %v", want, got)
+	}
+	lt, _ := op.Filter["sourceLsn"].(map[string]any)
+	if lt == nil || lt["$lt"] != int64(2000) {
+		t.Errorf("want Filter.sourceLsn.$lt=2000, got %v", op.Filter["sourceLsn"])
+	}
+	// Explicitly: no $or on deletes (no $exists:false branch).
+	if _, hasOr := op.Filter["$or"]; hasOr {
+		t.Errorf("delete filter should not use $or, got %v", op.Filter["$or"])
+	}
+}
