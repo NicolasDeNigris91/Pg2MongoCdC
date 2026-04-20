@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # Fast feedback: go test + vet + build for both services, plus shell-syntax
+  # check and compose-config validation. Should finish in ~60s.
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+          cache-dependency-path: |
+            services/sink/go.sum
+            services/loadgen/go.sum
+
+      - name: sink — test, vet, build
+        working-directory: services/sink
+        run: |
+          go test ./...
+          go vet ./...
+          go build ./...
+
+      - name: loadgen — test, vet, build
+        working-directory: services/loadgen
+        run: |
+          go test ./...
+          go vet ./...
+          go build ./...
+
+      - name: bash scripts — syntax check
+        run: |
+          set -e
+          for f in scripts/*.sh chaos/*.sh chaos/scenarios/*.sh; do
+            bash -n "$f"
+          done
+          echo "all scripts parse"
+
+      - name: JSON configs — validity
+        run: |
+          for f in connectors/*.json observability/**/*.json; do
+            [ -f "$f" ] && node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" && echo "OK $f"
+          done
+
+      - name: docker compose — validate all overlays
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.chaos.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.chaos.yml -f docker-compose.toxiproxy.yml config --quiet
+
+      - name: "chaos scripts — every scenario carries a PASS criterion"
+        run: |
+          set -e
+          for s in chaos/scenarios/*.sh; do
+            if ! grep -q '^# PASS:' "$s"; then
+              echo "FAIL: $s missing PASS: comment" && exit 1
+            fi
+          done
+          echo "all scenarios carry a PASS: criterion"
+
+  # Hit a real Mongo (GitHub service container) for the LSN-gating proof.
+  # Fast: ~15s once Go deps cache warm.
+  integration-mongo:
+    runs-on: ubuntu-latest
+    needs: unit
+    timeout-minutes: 10
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+          cache-dependency-path: services/sink/go.sum
+
+      - name: run LSN-gate integration test
+        working-directory: services/sink
+        env:
+          MONGO_URI: mongodb://localhost:27017/?directConnection=true
+        run: go test -tags integration -v -run TestMongoWriter_LSNGate ./internal/writer/...
+
+  # Boot the full stack, register Debezium, seed, verify PG↔Mongo counts
+  # match end-to-end. Skips the chaos suite (it needs ~5 min and is better
+  # run manually on PR-labels until the runner-cost profile is known).
+  integration-stack:
+    runs-on: ubuntu-latest
+    needs: unit
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: prepare env
+        run: cp .env.example .env
+
+      - name: bring up core stack
+        run: docker compose up -d --build --wait
+
+      - name: register Debezium source
+        run: bash scripts/register-connectors.sh
+
+      - name: seed + verify integrity
+        run: |
+          sleep 15
+          bash scripts/seed.sh
+          bash chaos/verify-integrity.sh
+
+      - name: logs on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail=200
+
+      - name: teardown
+        if: always()
+        run: docker compose down -v
