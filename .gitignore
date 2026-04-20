@@ -12,6 +12,8 @@ bin/
 *.out
 coverage.out
 vendor/
+# local Go cache (if GOPATH/GOCACHE ever land inside repo)
+.gocache/
 
 # Docker / local state
 .volumes/
