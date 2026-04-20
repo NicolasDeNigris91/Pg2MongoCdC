@@ -2,8 +2,12 @@
 
 > A live demonstration of CDC-based migration with zero downtime, exactly-once effects under at-least-once delivery, and measured resilience under chaos.
 
-[![chaos](https://img.shields.io/badge/chaos--suite-passing-brightgreen)](./chaos/)
-[![lag p99](https://img.shields.io/badge/replication_lag_p99-%3C5s-brightgreen)](./observability/)
+[![chaos Week 1](https://img.shields.io/badge/chaos--suite_week_1-3%2F4_pass-yellow)](./docs/chaos-findings.md)
+[![lag p99](https://img.shields.io/badge/replication_lag_p99-target_%3C5s-lightgrey)](./observability/)
+
+> Chaos status is honest — one scenario (kill Connect mid-stream) lost 1 row under
+> SIGKILL. See [chaos-findings.md](./docs/chaos-findings.md) for the full mechanism
+> and why it is exactly the motivation for the Week 2 Go sink.
 
 ---
 
