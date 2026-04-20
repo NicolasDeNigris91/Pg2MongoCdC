@@ -16,6 +16,10 @@ services:
     environment:
       BOOTSTRAP_SERVERS: "toxiproxy:19092"
 
+  transformer:
+    environment:
+      KAFKA_BROKERS: "toxiproxy:19092"
+
   sink:
     environment:
       KAFKA_BROKERS: "toxiproxy:19092"

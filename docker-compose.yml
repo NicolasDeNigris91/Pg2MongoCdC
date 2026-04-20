@@ -186,9 +186,41 @@ services:
     logging: *default-logging
 
   # ------------------------------------------------------------------
+  # Week 4: transformer reads cdc.*, applies YAML rename rules from
+  # schema/transforms/, publishes transformed.*. Destravamos ADR-004.
+  # ------------------------------------------------------------------
+  transformer:
+    build:
+      context: ./services/transformer
+    container_name: zdt-transformer
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: "kafka:29092"
+      KAFKA_GROUP_ID: "zdt-transformer"
+      KAFKA_TOPIC_REGEX: "^cdc\\..*"
+      RULES_DIR: "/etc/transformer/rules"
+      METRICS_ADDR: ":8080"
+    volumes:
+      - ./schema/transforms:/etc/transformer/rules:ro
+    ports:
+      - "8087:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *default-logging
+
+  # ------------------------------------------------------------------
   # Week 2: our own Go sink with commit-after-side-effect + LSN-gated
   # idempotent upserts. Replaces the off-the-shelf MongoDB Kafka
   # Connector (which lost 1 row in chaos 01 — see docs/chaos-findings.md).
+  # Week 4: sink now consumes transformed.* instead of cdc.* — the
+  # transformer sits between them and applies YAML rules.
   # ------------------------------------------------------------------
   sink:
     build:
@@ -203,7 +235,7 @@ services:
     environment:
       KAFKA_BROKERS: "kafka:29092"
       KAFKA_GROUP_ID: "zdt-sink"
-      KAFKA_TOPIC_REGEX: "^cdc\\..*"
+      KAFKA_TOPIC_REGEX: "^transformed\\..*"
       MONGO_URI: "mongodb://mongo:27017/?replicaSet=rs0"
       MONGO_DB: "migration"
       METRICS_ADDR: ":8080"
