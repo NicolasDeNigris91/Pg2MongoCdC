@@ -50,11 +50,26 @@ Combined with LSN-gated upserts from [ADR-002](./decisions/002-lsn-gated-upserts
 
 Off-the-shelf tools have config-tunable correctness; hand-rolled code has structural correctness. This project demonstrates both, and the chaos suite enforces the difference with data, not prose.
 
-## Scenario 02 (Kafka network partition via Toxiproxy) — deferred
+## Scenario 02 — Kafka network partition via Toxiproxy (Week 3)
 
-Not run in this pass. Rationale: the current stack routes Debezium and the Mongo sink to `kafka:29092` directly, not through Toxiproxy's `:19092` proxy. Injecting a toxic has no effect until `BOOTSTRAP_SERVERS` is rewired through Toxiproxy.
+**PASS.** Baseline PG=2 / Mongo=2, 30s of inserts under injected 500ms latency + 10% packet loss, pipeline drained after toxics removed, final PG=32 / Mongo=32, `INTEGRITY OK`.
 
-Fix is a one-line overlay (`docker-compose.chaos.yml`: set `BOOTSTRAP_SERVERS=toxiproxy:19092` for connect and the Week 2 services). Deferred to Week 3 cleanup so Week 2 can focus on the sink rewrite.
+### How we gave Toxiproxy real teeth
+
+Kafka now advertises a dedicated `PROXIED` listener whose advertised host is `toxiproxy:19092`. Toxiproxy forwards that to Kafka's internal listener on `kafka:39092`. Clients bootstrapping via `toxiproxy:19092` therefore receive metadata that also points back through the proxy — every subsequent produce/fetch flows through Toxiproxy, so injected toxics affect actual traffic rather than just the initial TCP handshake.
+
+The routing is opt-in via `docker-compose.toxiproxy.yml` overlay (sets `BOOTSTRAP_SERVERS` for Connect and the Go sink to `toxiproxy:19092`). Without the overlay, clients use the normal `INTERNAL://kafka:29092` listener and Toxiproxy has no effect — important so the default `make demo` doesn't pay proxy overhead.
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.chaos.yml \
+  -f docker-compose.toxiproxy.yml \
+  up -d --wait
+bash scripts/register-connectors.sh
+bash chaos/scenarios/02-kafka-partition.sh
+# -> INTEGRITY OK
+```
 
 ## Week 2 results — Go sink in place
 

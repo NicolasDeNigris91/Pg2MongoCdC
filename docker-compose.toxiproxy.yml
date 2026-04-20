@@ -1,0 +1,21 @@
+# Overlay that routes Connect (Debezium) and the Go sink through Toxiproxy.
+# Use with:
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.chaos.yml \
+#                  -f docker-compose.toxiproxy.yml \
+#                  up -d --wait
+# With this overlay active, chaos/scenarios/02-kafka-partition.sh can inject
+# latency / packet-loss toxics and they will actually affect the pipeline
+# (without the overlay, Kafka advertises its direct listener and clients
+# bypass the proxy entirely).
+
+name: zdt-migration
+
+services:
+  connect:
+    environment:
+      BOOTSTRAP_SERVERS: "toxiproxy:19092"
+
+  sink:
+    environment:
+      KAFKA_BROKERS: "toxiproxy:19092"
