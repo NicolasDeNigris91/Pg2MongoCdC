@@ -1,0 +1,79 @@
+// Package decoder parses Debezium JSON-envelope CDC events into the
+// normalized CDCEvent used by the writer package.
+//
+// The Debezium JsonConverter with schemas.enable=true emits records as:
+//
+//	{ "schema": {...}, "payload": { before|after|source|op|ts_ms|... } }
+//
+// and keys of the same shape with payload.<PK-field>. We keep the
+// decoder strict: unknown/malformed envelopes return errors, never
+// silent defaults. Tombstone messages (value==null) are signaled via
+// ErrTombstone so the consumer can skip them without logging noise.
+package decoder
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"zdt/sink/internal/writer"
+)
+
+// ErrTombstone is returned when Decode sees a Kafka tombstone (value=nil).
+// Callers should skip tombstones — the preceding "d" event is the real op.
+var ErrTombstone = errors.New("decoder: tombstone event, skip")
+
+type keyEnvelope struct {
+	Payload struct {
+		// json.Number preserves the exact numeric token so PKs > 2^53
+		// do not lose precision through float64.
+		ID json.Number `json:"id"`
+	} `json:"payload"`
+}
+
+type valueEnvelope struct {
+	Payload struct {
+		Before map[string]any `json:"before"`
+		After  map[string]any `json:"after"`
+		Source struct {
+			LSN   json.Number `json:"lsn"`
+			Table string      `json:"table"`
+		} `json:"source"`
+		Op string `json:"op"`
+	} `json:"payload"`
+}
+
+func Decode(key, value []byte) (writer.CDCEvent, error) {
+	if len(value) == 0 || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return writer.CDCEvent{}, ErrTombstone
+	}
+
+	var v valueEnvelope
+	if err := json.Unmarshal(value, &v); err != nil {
+		return writer.CDCEvent{}, fmt.Errorf("decoder.Decode: parse value: %w", err)
+	}
+	var k keyEnvelope
+	if err := json.Unmarshal(key, &k); err != nil {
+		return writer.CDCEvent{}, fmt.Errorf("decoder.Decode: parse key: %w", err)
+	}
+
+	lsn, err := v.Payload.Source.LSN.Int64()
+	if err != nil {
+		return writer.CDCEvent{}, fmt.Errorf("decoder.Decode: lsn: %w", err)
+	}
+
+	pk := string(k.Payload.ID)
+	if pk == "" {
+		return writer.CDCEvent{}, errors.New("decoder.Decode: empty PK in key payload")
+	}
+
+	return writer.CDCEvent{
+		Table:  v.Payload.Source.Table,
+		PK:     pk,
+		LSN:    lsn,
+		Op:     writer.CDCOp(v.Payload.Op),
+		After:  v.Payload.After,
+		Before: v.Payload.Before,
+	}, nil
+}
