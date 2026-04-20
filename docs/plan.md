@@ -379,14 +379,15 @@ Short honest section: what I chose NOT to build and why.
 
 ---
 
-## Implementation Phases (4-week plan)
+## Implementation Phases — delivered
 
-| Week | Deliverable | Exit criterion |
-|---|---|---|
-| 1 | Compose stack + Debezium + Kafka + Mongo boot, manual INSERT flows through to Mongo | `INSERT INTO users` appears in `db.users.findOne()` within 2s |
-| 2 | Transformer + Sink services, LSN-gated upserts, manual commit, DLQ | k6 at 1k writes/sec, 0 data loss after `kill -9 transformer` |
-| 3 | Prometheus + Grafana dashboards, 5 chaos scenarios, verify-integrity script | `make chaos` passes all 5 |
-| 4 | Schema evolution demo (add column, rename column), README + ADRs + CI | CI green, README reads well, one recorded demo video |
+| Week | Status | Shipping commit | Exit criterion met |
+|---|---|---|---|
+| 1 | ✅ Delivered | `0fa8dbc` | INSERT → `db.users.findOne()` within 2s; walking skeleton verified end-to-end |
+| 2 | ✅ Delivered | `ce78ffe` … `3fe76ff` | 10 TDD cycles for Go sink; chaos 01 × 4 consecutive PASS (0 loss, 0 dup); integration test proves LSN gate across 6 ordering cases against live Mongo |
+| 3 | ✅ Delivered | `3b20af4`, `0bee563` | loadgen sidecar sustained 3,755 req/s / 0 failures; Toxiproxy with Kafka PROXIED listener → chaos 02 PASS under 500ms latency + 10% packet loss |
+| 4 | ✅ Delivered | `e60a612`, `c4f30f3` | Transformer service live, YAML rules renaming `full_name → fullName` etc. in Mongo docs; GitHub Actions CI workflow validated with actionlint |
+| Polish | ✅ Delivered | `e356cdd` | Sink batching: drain rate ~240 w/s → ≥ 7,300 w/s (~30×); README hero rewritten; architecture diagram + findings doc updated |
 
 ---
 
