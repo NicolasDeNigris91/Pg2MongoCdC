@@ -133,12 +133,14 @@ func newInstrumentedWriter(inner consumer.Writer, m *metrics.Metrics) *instrumen
 	return &instrumentedWriter{inner: inner, m: m}
 }
 
-func (i *instrumentedWriter) Apply(ctx context.Context, ev writer.CDCEvent) error {
-	if err := i.inner.Apply(ctx, ev); err != nil {
+func (i *instrumentedWriter) ApplyBatch(ctx context.Context, evs []writer.CDCEvent) error {
+	if err := i.inner.ApplyBatch(ctx, evs); err != nil {
 		i.m.WriteErrors.WithLabelValues("mongo", classify(err)).Inc()
 		return err
 	}
-	i.m.EventsProcessed.WithLabelValues("sink", ev.Table, string(ev.Op)).Inc()
+	for _, ev := range evs {
+		i.m.EventsProcessed.WithLabelValues("sink", ev.Table, string(ev.Op)).Inc()
+	}
 	return nil
 }
 

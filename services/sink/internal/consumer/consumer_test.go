@@ -37,15 +37,19 @@ func (f *fakeConsumer) CommitMarked(ctx context.Context) error {
 }
 
 type fakeWriter struct {
-	applied   []writer.CDCEvent
-	failOnLSN int64 // if >0, Apply returns error when ev.LSN equals this
+	batches   [][]writer.CDCEvent
+	failOnLSN int64 // if >0, ApplyBatch fails when any event.LSN equals this
 }
 
-func (f *fakeWriter) Apply(ctx context.Context, ev writer.CDCEvent) error {
-	if f.failOnLSN > 0 && ev.LSN == f.failOnLSN {
-		return errors.New("synthetic apply failure")
+func (f *fakeWriter) ApplyBatch(_ context.Context, evs []writer.CDCEvent) error {
+	if f.failOnLSN > 0 {
+		for _, e := range evs {
+			if e.LSN == f.failOnLSN {
+				return errors.New("synthetic apply failure")
+			}
+		}
 	}
-	f.applied = append(f.applied, ev)
+	f.batches = append(f.batches, evs)
 	return nil
 }
 
@@ -58,9 +62,10 @@ func makeInsert(pk, lsn int64) (key, value []byte) {
 
 // --- tests ---
 
-// ADR-003 happy path: every successful apply marks its offset; CommitMarked
-// runs once at end of batch.
-func TestLoop_AllSuccessfulWritesCommitted(t *testing.T) {
+// Happy path: a successful ApplyBatch is followed by MarkCommit on every
+// record and exactly one CommitMarked call. Tombstones mix in without
+// breaking the ordering invariant.
+func TestLoop_SuccessfulBatchCommitsAllOffsets(t *testing.T) {
 	var recs []consumer.Record
 	for i, lsn := range []int64{100, 101, 102} {
 		k, v := makeInsert(int64(i+1), lsn)
@@ -79,22 +84,23 @@ func TestLoop_AllSuccessfulWritesCommitted(t *testing.T) {
 	if fc.commitCalls != 1 {
 		t.Errorf("want CommitMarked called once, got %d", fc.commitCalls)
 	}
-	if len(fw.applied) != 3 {
-		t.Errorf("want 3 applied events, got %d", len(fw.applied))
+	if len(fw.batches) != 1 || len(fw.batches[0]) != 3 {
+		t.Errorf("want one batch of 3 events, got %d batches / %v", len(fw.batches), fw.batches)
 	}
 }
 
-// ADR-003 core invariant: if a write fails, that record's offset MUST NOT
-// be committed. Records after it in the batch are NOT processed. Earlier
-// successful writes ARE committed so their work is preserved across retry.
-func TestLoop_FailedWriteStopsBatchAndDoesNotCommitFailedOffset(t *testing.T) {
+// ADR-003 under batch semantics: if ApplyBatch fails, the Loop must NOT
+// commit anything — the whole poll batch will be redelivered. Downstream
+// idempotency (ADR-002 LSN gate) absorbs whatever records were partially
+// flushed on the Mongo side before the failure.
+func TestLoop_FailedBatchCommitsNothing(t *testing.T) {
 	recs := []consumer.Record{}
 	for i, lsn := range []int64{100, 101, 102} {
 		k, v := makeInsert(int64(i+1), lsn)
 		recs = append(recs, consumer.Record{Key: k, Value: v, Offset: lsn, Topic: "cdc.users"})
 	}
 	fc := &fakeConsumer{records: recs}
-	fw := &fakeWriter{failOnLSN: 101} // 2nd record fails
+	fw := &fakeWriter{failOnLSN: 101} // any record in the batch triggers batch failure
 	loop := &consumer.Loop{Cons: fc, W: fw, SchemaVer: 1}
 
 	err := loop.RunOnce(context.Background())
@@ -102,20 +108,10 @@ func TestLoop_FailedWriteStopsBatchAndDoesNotCommitFailedOffset(t *testing.T) {
 		t.Fatal("want error, got nil")
 	}
 
-	// Only the first record's offset should be marked.
-	if slices.Contains(fc.markedOffsets, int64(101)) {
-		t.Errorf("offset 101 MUST NOT be marked (its write failed); got %v", fc.markedOffsets)
+	if len(fc.markedOffsets) != 0 {
+		t.Errorf("no offsets should be marked on batch failure; got %v", fc.markedOffsets)
 	}
-	if slices.Contains(fc.markedOffsets, int64(102)) {
-		t.Errorf("offset 102 MUST NOT be marked (never processed); got %v", fc.markedOffsets)
-	}
-	if !slices.Contains(fc.markedOffsets, int64(100)) {
-		t.Errorf("offset 100 should be marked (its write succeeded); got %v", fc.markedOffsets)
-	}
-
-	// CommitMarked must run so offset 100 is durable; redelivery must pick up
-	// from 101 on next poll.
-	if fc.commitCalls != 1 {
-		t.Errorf("want CommitMarked called once even on error, got %d", fc.commitCalls)
+	if fc.commitCalls != 0 {
+		t.Errorf("CommitMarked should NOT run when the batch failed; got %d calls", fc.commitCalls)
 	}
 }

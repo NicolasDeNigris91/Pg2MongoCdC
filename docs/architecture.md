@@ -84,14 +84,14 @@ Cross-cutting (Week 3):
 - Heartbeat interval 1s prevents WAL from being recycled when the target tables are idle but the broader DB is busy (the #1 cause of silent data loss in real deployments).
 - `REPLICA IDENTITY FULL` on all source tables so DELETE events carry the full before-image — crucial for correct tombstone handling downstream.
 
-## Week 1 vs. the final architecture
+## Delivered state (Week 4 complete)
 
-**Today (Week 1 walking skeleton):** The MongoDB Kafka Connector sits where the Go `sink-svc` will eventually sit. It consumes `cdc.*` topics using Debezium's `PostgresHandler` and writes upserts/deletes to Mongo. This proves the Postgres → Kafka → Mongo path end-to-end with zero custom code.
+All three services exist, all are Go, all are tested and chaos-verified:
 
-**Week 2 onward:** The off-the-shelf Mongo sink is replaced by:
+- **`transformer-svc`** — Go, franz-go consume+produce loop. Loads `schema/transforms/*.yml` at boot, renames `payload.after` keys per rule on each event, publishes to `transformed.<table>`. Tombstones forwarded as-is. Commit-after-produce (ADR-003). See `services/transformer/`.
 
-1. **`transformer-svc`** — a Go service that consumes `cdc.*`, applies declarative YAML schema rules, produces to `transformed.*`, and routes malformed events to `dlq.source` with full error context.
+- **`sink-svc`** — Go, franz-go consumer + Mongo driver. Decodes the Debezium envelope, builds LSN-gated upserts (ADR-002), dispatches one `BulkWrite` per collection per poll batch (ADR-003). ~7,300 w/s sustained drain rate on commodity hardware (measured; the Week-3 "240 w/s" finding is closed).
 
-2. **`sink-svc`** — a Go service that consumes `transformed.*` and performs **LSN-gated idempotent upserts** into Mongo. This is where the "exactly-once effect under at-least-once delivery" story lives. See [ADR-002](./decisions/002-lsn-gated-upserts.md) when it's written.
+- **`loadgen`** — Go, pgx. Translates k6 HTTP into Postgres writes. Proves 3.7k RPS sustained with 0 failures on the loadgen side.
 
-The two-stage design isn't accidental. The transformer is CPU-bound (parsing, mapping, validation) and horizontally scales by partition count. The sink is I/O-bound and requires tight idempotency control. Separate services = separate scaling, separate failure domains, separate SLOs, and `transformed.*` serves as a replay buffer when debugging sink issues without touching the WAL.
+The two-service split (transformer + sink) isn't accidental. Transformer is CPU-bound (parsing, mapping, validation) and scales by partition count. Sink is I/O-bound and owns LSN-gating correctness. Separate services = separate scaling, separate failure domains, separate SLOs. Both inherit the same commit-after-side-effect invariant at slightly different granularities (per-produce for transformer, per-batch for sink).

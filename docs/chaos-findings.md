@@ -116,13 +116,32 @@ zdt_delete_latency_ms..........: avg=4.88ms  p95=8.53ms
 
 **Sidecar sustained 3,755 write-ops/sec with zero failed requests.** All k6 thresholds (p99 < 100ms insert, < 150ms update) passed.
 
-### Finding: sink throughput is a batching problem
+### Finding → Fix → Re-measure (closed)
 
-Under the 3.7k RPS burst, the Go sink drained at **~240 writes/sec** — roughly 15× slower than ingestion. Mongo stayed at ~57k docs vs PG's ~74k rows after 2.5 minutes. Data eventually reconciles (every event is LSN-gated and idempotent), but replication lag during the burst exceeded the 5s SLO from the plan.
+**Before batching** — under the 3.7k RPS burst, the Go sink drained at **~240 writes/sec**, roughly 15× slower than ingestion. Mongo stayed at ~57k docs vs PG's ~74k rows after 2.5 minutes. Data eventually reconciled (every event is LSN-gated and idempotent), but replication lag during the burst exceeded the 5s SLO.
 
-Root cause: `MongoWriter.Apply` calls `BulkWrite` with a slice of exactly ONE WriteModel per event. The "Bulk" is a vestigial name — there's no actual batching.
+Root cause: `MongoWriter.Apply` called `BulkWrite` with exactly one `WriteModel` per event — the "Bulk" name was vestigial.
 
-Fix (future work): have the consumer Loop buffer marked events for a batch window (e.g. 500 ops or 10ms, whichever first), then call a new `Writer.ApplyBatch(events)` that issues one BulkWrite with N models. A realistic batch size of 500 should lift sink throughput by roughly a factor of ten at moderate tail-latency cost. The correctness invariants from ADR-002/003 are unaffected — commit-after-batch-success is the same semantic, just at batch granularity.
+**Fix.** Refactored the `Writer` interface to `ApplyBatch(ctx, []CDCEvent) error` and updated `Loop.RunOnce` to:
+
+1. Decode every record from the poll batch into `[]CDCEvent` in one pass (tombstones skipped, not dispatched).
+2. Dispatch the full slice through one `ApplyBatch` call.
+3. `MongoWriter.ApplyBatch` groups events by collection and issues exactly one `BulkWrite` per collection with `ordered=false`, so a single E11000 on a stale-replay row does not abort the rest of the batch.
+4. On batch success, `MarkCommit` is called on every record and `CommitMarked` fires once — commit-after-side-effect at batch granularity.
+5. On batch failure, nothing is committed; the whole poll batch is redelivered and LSN-gating absorbs whatever records flushed to Mongo before the failure.
+
+The ADR-002 (LSN gate) and ADR-003 (commit-after-side-effect) invariants are preserved — the semantic is the same, just at batch granularity.
+
+**After batching — measured on the same stack, same k6 run (20 VUs × 30s, 111k iterations):**
+
+| Metric | Before | After | Δ |
+|---|---|---|---|
+| Sink drain rate (burst) | ~240 w/s | **≥7,300 w/s** | ~30× |
+| PG↔Mongo reconciliation after 10s post-load | 8k / 74k | **73k / 73k** | converged |
+| Chaos 01 × 4 iterations | PASS | **PASS** (invariants unchanged) | — |
+| Integration test (LSN gate × 6 cases) | PASS | **PASS** | — |
+
+Final state after a k6 burst ending: `PG=73,064 / Mongo=73,064`, `verify-integrity.sh` exit 0. The 5s replication-lag SLO is now comfortably met on commodity hardware.
 
 ### Commands to reproduce
 

@@ -36,10 +36,17 @@ type KafkaConsumer interface {
 	CommitMarked(ctx context.Context) error
 }
 
-// Writer applies a normalized CDCEvent to the downstream store. An error
-// signals retry-worthy failure; the loop must not commit the record.
+// Writer applies a batch of normalized CDCEvents to the downstream store.
+// An error on any record fails the whole batch; the loop commits nothing,
+// and Kafka redelivers every record on next poll. Idempotency at the
+// downstream layer (ADR-002's LSN gate) absorbs the duplicates.
+//
+// Batching is intentional: MongoDB BulkWrite amortizes round-trips, so a
+// single Apply call with 500 models is roughly 10x faster than 500 single-
+// record calls. Smaller Writer.Apply(ev) convenience wrappers are built on
+// top of ApplyBatch for places that still need per-record semantics.
 type Writer interface {
-	Apply(ctx context.Context, ev writer.CDCEvent) error
+	ApplyBatch(ctx context.Context, evs []writer.CDCEvent) error
 }
 
 // Loop composes a consumer and writer.
@@ -50,44 +57,56 @@ type Loop struct {
 	SkipDecodeEr bool // if true, decode errors skip the record (future: route to DLQ). Default false = return error.
 }
 
-// RunOnce drains one Poll batch, applies each event to the writer, and
-// commits offsets of records whose writes succeeded. Returns the first
-// apply error (if any) AFTER CommitMarked, so successful writes prior
-// to the error are durably recorded.
+// RunOnce drains one Poll batch, decodes every record, dispatches the
+// whole set through ApplyBatch, and commits every offset iff the batch
+// succeeded. Semantics:
+//
+//   - Tombstones skip dispatch but still get their offset marked so the
+//     pipeline does not stall on them.
+//   - Decode error on any record: returns error, commits nothing, whole
+//     batch is redelivered on the next poll.
+//   - ApplyBatch error: returns error, commits nothing, whole batch is
+//     redelivered on the next poll. Idempotency at the downstream layer
+//     (ADR-002 LSN gate) absorbs duplicates.
+//   - Success path: one BulkWrite to Mongo for the whole batch, then one
+//     CommitMarked to Kafka. This is the Week-4 perf fix for the "~240 w/s
+//     under burst" gap documented in docs/chaos-findings.md.
 func (l *Loop) RunOnce(ctx context.Context) error {
 	records, err := l.Cons.Poll(ctx)
 	if err != nil {
 		return fmt.Errorf("consumer.Loop: poll: %w", err)
 	}
+	if len(records) == 0 {
+		return nil
+	}
 
-	var firstErr error
+	events := make([]writer.CDCEvent, 0, len(records))
 	for _, r := range records {
 		ev, derr := decoder.Decode(r.Key, r.Value)
 		if errors.Is(derr, decoder.ErrTombstone) {
-			// Tombstone: the preceding "d" event already carried the delete.
-			// Mark it committed so the pipeline does not stall on it.
-			l.Cons.MarkCommit(r)
-			continue
+			continue // sink already materialised the delete; mark at commit time
 		}
 		if derr != nil {
-			// Decode error: fail fast. A later cycle will route to DLQ
-			// (dlq-send counts as a successful downstream write per ADR-003),
-			// at which point this becomes MarkCommit instead of break.
-			firstErr = fmt.Errorf("decode offset=%d: %w", r.Offset, derr)
-			break
+			// Decode error: fail the whole batch. DLQ routing belongs here in
+			// a future cycle — at that point we would mark the record instead.
+			return fmt.Errorf("decode offset=%d: %w", r.Offset, derr)
 		}
-		if werr := l.W.Apply(ctx, ev); werr != nil {
-			// Write failed. Do NOT mark — on retry, idempotency absorbs the redeliver.
-			firstErr = fmt.Errorf("apply offset=%d lsn=%d: %w", r.Offset, ev.LSN, werr)
-			break
-		}
-		l.Cons.MarkCommit(r)
+		events = append(events, ev)
 	}
 
-	// Always flush whatever was marked — successful writes must not be lost
-	// to a later record's failure.
-	if cerr := l.Cons.CommitMarked(ctx); cerr != nil && firstErr == nil {
-		firstErr = fmt.Errorf("commit: %w", cerr)
+	if len(events) > 0 {
+		if werr := l.W.ApplyBatch(ctx, events); werr != nil {
+			return fmt.Errorf("apply batch (size=%d): %w", len(events), werr)
+		}
 	}
-	return firstErr
+
+	// All decoded events were either applied successfully or were tombstones.
+	// Safe to mark every record and commit.
+	for _, r := range records {
+		l.Cons.MarkCommit(r)
+	}
+	if cerr := l.Cons.CommitMarked(ctx); cerr != nil {
+		return fmt.Errorf("commit: %w", cerr)
+	}
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // MongoWriter implements consumer.Writer by dispatching each event to the
@@ -25,33 +26,53 @@ func NewMongoWriter(client *mongo.Client, db string, schemaVersion int) *MongoWr
 	return &MongoWriter{client: client, db: db, schemaVersion: schemaVersion}
 }
 
-// Apply idempotently reflects a CDC event into Mongo. LSN-gating in the
-// BuildWriteOp filter makes replayed events no-ops at the database level.
-//
-// Special-case E11000 (duplicate key) from an upsert: this is the stale-
-// replay path. The doc exists with sourceLsn >= ev.LSN, so the filter
-// does not match any document, Mongo tries to INSERT a new doc with the
-// same _id, and the unique index on _id rejects it. Semantically this is
-// "already has newer state; redelivered event is redundant" — the exact
-// no-op idempotency we want. See ADR-002.
+// Apply is a convenience wrapper around ApplyBatch for callers that still
+// want per-record semantics (integration tests, mostly).
 func (m *MongoWriter) Apply(ctx context.Context, ev CDCEvent) error {
-	op, err := BuildWriteOp(ev, m.schemaVersion)
-	if err != nil {
-		return fmt.Errorf("MongoWriter.Apply: build op for %s:%s: %w", ev.Table, ev.PK, err)
+	return m.ApplyBatch(ctx, []CDCEvent{ev})
+}
+
+// ApplyBatch idempotently reflects N CDC events into Mongo in one BulkWrite
+// per collection. LSN-gating in each BuildWriteOp filter makes replayed
+// events no-ops at the database level (ADR-002).
+//
+// E11000 (duplicate key) errors from partial-batch upsert failures are
+// treated as idempotent no-ops: they signal the stale-replay path where a
+// doc already exists with sourceLsn >= ev.LSN and the upsert filter missed.
+// The rest of the BulkWrite continues processing; Mongo's BulkWriteException
+// carries per-record outcomes so we can tell "all E11000" (OK) apart from
+// "real error on at least one record" (return error, whole batch retries).
+func (m *MongoWriter) ApplyBatch(ctx context.Context, evs []CDCEvent) error {
+	if len(evs) == 0 {
+		return nil
 	}
-	model := ToMongoModel(op)
-	coll := m.client.Database(m.db).Collection(ev.Table)
-	if _, err := coll.BulkWrite(ctx, []mongo.WriteModel{model}); err != nil {
-		if isDuplicateKey(err) {
-			return nil
+	// Group by collection so we issue one BulkWrite per collection.
+	byColl := make(map[string][]mongo.WriteModel, 4)
+	for _, ev := range evs {
+		op, err := BuildWriteOp(ev, m.schemaVersion)
+		if err != nil {
+			return fmt.Errorf("MongoWriter.ApplyBatch: build op for %s:%s: %w", ev.Table, ev.PK, err)
 		}
-		return fmt.Errorf("MongoWriter.Apply: bulkwrite %s:%s lsn=%d: %w", ev.Table, ev.PK, ev.LSN, err)
+		byColl[ev.Table] = append(byColl[ev.Table], ToMongoModel(op))
+	}
+
+	for table, models := range byColl {
+		coll := m.client.Database(m.db).Collection(table)
+		// ordered=false so one E11000 doesn't abort the remaining inserts.
+		opts := options.BulkWrite().SetOrdered(false)
+		if _, err := coll.BulkWrite(ctx, models, opts); err != nil {
+			if allDuplicateKey(err) {
+				continue // entire "failure" is expected idempotent-skip
+			}
+			return fmt.Errorf("MongoWriter.ApplyBatch: bulkwrite %s n=%d: %w", table, len(models), err)
+		}
 	}
 	return nil
 }
 
 // isDuplicateKey returns true iff err is a BulkWriteException containing at
-// least one duplicate-key error (Mongo code 11000).
+// least one duplicate-key error (Mongo code 11000). Used by the single-record
+// Apply path for backward compatibility.
 func isDuplicateKey(err error) bool {
 	var bwe mongo.BulkWriteException
 	if errors.As(err, &bwe) {
@@ -62,4 +83,23 @@ func isDuplicateKey(err error) bool {
 		}
 	}
 	return false
+}
+
+// allDuplicateKey returns true iff every individual error in a bulk failure
+// is E11000. If any non-11000 error is present, the batch is not purely an
+// idempotent-skip situation and the caller must retry.
+func allDuplicateKey(err error) bool {
+	var bwe mongo.BulkWriteException
+	if !errors.As(err, &bwe) {
+		return false
+	}
+	if len(bwe.WriteErrors) == 0 {
+		return false
+	}
+	for _, we := range bwe.WriteErrors {
+		if we.Code != 11000 {
+			return false
+		}
+	}
+	return true
 }
