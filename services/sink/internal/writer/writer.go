@@ -8,6 +8,8 @@
 // and makes the LSN-gating invariant (ADR-002) readable in isolation.
 package writer
 
+import "fmt"
+
 
 // CDCOp is the operation carried by a Debezium event (see the envelope `op` field).
 type CDCOp string
@@ -58,6 +60,10 @@ type WriteOp struct {
 //
 func BuildWriteOp(ev CDCEvent, schemaVersion int) (WriteOp, error) {
 	id := ev.Table + ":" + ev.PK
+
+	if ev.Op != OpDelete && ev.After == nil {
+		return WriteOp{}, fmt.Errorf("writer.BuildWriteOp: op=%s requires non-nil After for %s", ev.Op, id)
+	}
 
 	if ev.Op == OpDelete {
 		return WriteOp{

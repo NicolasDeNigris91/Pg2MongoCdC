@@ -114,3 +114,33 @@ func TestBuildWriteOp_DeleteProducesLSNGatedDelete(t *testing.T) {
 		t.Errorf("delete filter should not use $or, got %v", op.Filter["$or"])
 	}
 }
+
+// Cycle 3: nil After on a non-delete op is a correctness bug — an upsert
+// with an empty $set would insert a document containing only sourceLsn and
+// schemaVersion on first write, losing all real fields. We reject at the
+// boundary rather than silently produce a malformed write.
+func TestBuildWriteOp_NilAfterOnNonDeleteIsError(t *testing.T) {
+	cases := []struct {
+		name string
+		op   writer.CDCOp
+	}{
+		{"insert", writer.OpInsert},
+		{"update", writer.OpUpdate},
+		{"read_snapshot", writer.OpRead},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := writer.CDCEvent{
+				Table: "users",
+				PK:    "42",
+				LSN:   1000,
+				Op:    tc.op,
+				After: nil,
+			}
+			_, err := writer.BuildWriteOp(ev, 1)
+			if err == nil {
+				t.Fatalf("want error for op=%s with nil After, got nil", tc.op)
+			}
+		})
+	}
+}
