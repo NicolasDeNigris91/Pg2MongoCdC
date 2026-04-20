@@ -1,0 +1,37 @@
+# Env / secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Go
+bin/
+*.exe
+*.exe~
+*.test
+*.out
+coverage.out
+vendor/
+
+# Docker / local state
+.volumes/
+postgres-data/
+kafka-data/
+mongo-data/
+connect-data/
+
+# Editors / OS / AI-tooling local state
+.vscode/
+.idea/
+.claude/settings.local.json
+*.swp
+.DS_Store
+Thumbs.db
+
+# k6
+k6-results/
+*.k6.log
+
+# logs
+*.log
+logs/

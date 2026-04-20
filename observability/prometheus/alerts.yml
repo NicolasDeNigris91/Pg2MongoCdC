@@ -1,0 +1,55 @@
+groups:
+  - name: zdt-migration
+    interval: 30s
+    rules:
+
+      - alert: ReplicationLagHigh
+        expr: histogram_quantile(0.99, sum(rate(migration_replication_lag_seconds_bucket[5m])) by (le)) > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Replication lag p99 > 10s for 5m"
+          description: "Consumers are falling behind. Check consumer CPU, Mongo write latency, Kafka broker health."
+          runbook: "docs/runbook.md#replicationlaghigh"
+
+      - alert: ConsumerLagHigh
+        expr: sum(kafka_consumergroup_lag) by (consumergroup) > 10000
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Consumer group lag > 10k for 2m"
+          runbook: "docs/runbook.md#consumerlaghigh"
+
+      - alert: DLQNonEmpty
+        expr: sum(kafka_topic_partition_current_offset{topic=~"dlq\\..*"} - kafka_topic_partition_oldest_offset{topic=~"dlq\\..*"}) > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Dead-letter queue has unprocessed messages"
+          description: "At least one poison event is sitting in a DLQ. Human triage required."
+          runbook: "docs/runbook.md#dlqnonempty"
+
+      - alert: CheckpointStaleness
+        expr: migration_checkpoint_staleness_seconds > 60
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sink checkpoint has not advanced in >60s"
+          runbook: "docs/runbook.md#checkpointstaleness"
+
+      - alert: WriteErrorRateHigh
+        expr: sum(rate(migration_write_errors_total[5m])) / sum(rate(migration_events_processed_total{stage="sink"}[5m])) > 0.001
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sink write error rate > 0.1% for 5m"
+          runbook: "docs/runbook.md#writeerrorratehigh"
+
+      - alert: ReplicationSlotInactive
+        expr: pg_replication_slots_active == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Postgres replication slot is inactive"
+          description: "Debezium is not connected to the slot. WAL will accumulate. If this persists, the source DB runs out of disk."
+          runbook: "docs/runbook.md#replicationslotinactive"

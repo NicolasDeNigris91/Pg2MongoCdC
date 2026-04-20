@@ -1,0 +1,212 @@
+# Zero-Downtime Migration — local dev stack.
+#
+# Laptop-simplified topology (see CLAUDE.md "Hard invariants #5"):
+#   - 1 Kafka broker in KRaft mode (prod = 3 brokers, RF=3, min.insync.replicas=2)
+#   - 1-node MongoDB replica set (prod = 3-node replica set)
+# These relaxations are dev-only. Topics are created with RF=1 here; the ADR
+# in docs/decisions/001-kafka-over-rabbitmq.md spells out the prod topology.
+#
+# Week 1 walking skeleton: prove INSERT on Postgres → appears in Mongo via
+# Debezium (source) + MongoDB Kafka Connector (sink). Week 2 replaces the
+# off-the-shelf Mongo sink with our own Go service that adds LSN-gating.
+
+name: zdt-migration
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # ------------------------------------------------------------------
+  # Source: PostgreSQL 16 with logical replication enabled
+  # ------------------------------------------------------------------
+  postgres:
+    image: postgres:16
+    container_name: zdt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./schema/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
+  # ------------------------------------------------------------------
+  # Kafka (KRaft, single combined node — dev only)
+  # ------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: zdt-kafka
+    restart: unless-stopped
+    environment:
+      # KRaft combined mode (controller + broker in one process)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:29092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092,INTERNAL://kafka:29092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # KRaft requires a cluster ID (base64-encoded UUID, 22 chars)
+      CLUSTER_ID: "MkU3OEVBNTcwNTJFNEY3Mg"
+    ports:
+      - "${KAFKA_EXTERNAL_PORT:-9092}:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging: *default-logging
+
+  # ------------------------------------------------------------------
+  # Schema Registry (Avro compat enforcement)
+  # ------------------------------------------------------------------
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    container_name: zdt-schema-registry
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:29092"
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: "BACKWARD"
+    ports:
+      - "${SCHEMA_REGISTRY_PORT:-8081}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/subjects >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+  # ------------------------------------------------------------------
+  # Kafka Connect with Debezium (source) + MongoDB Kafka Connector (sink)
+  # ------------------------------------------------------------------
+  connect:
+    build:
+      context: ./connectors/connect-image
+    container_name: zdt-connect
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: "kafka:29092"
+      GROUP_ID: ${CONNECT_GROUP_ID:-zdt-connect}
+      CONFIG_STORAGE_TOPIC: ${CONNECT_CONFIG_STORAGE_TOPIC:-_connect_configs}
+      OFFSET_STORAGE_TOPIC: ${CONNECT_OFFSET_STORAGE_TOPIC:-_connect_offsets}
+      STATUS_STORAGE_TOPIC: ${CONNECT_STATUS_STORAGE_TOPIC:-_connect_status}
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      # Week 1 simplification: JsonConverter is built into Kafka Connect.
+      # Avro + Schema Registry flips on in Week 2 (see ADR-006 "Week-1 exception").
+      KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "true"
+      # Heartbeat topic so Postgres doesn't recycle WAL during low traffic
+      # (the #1 cause of silent data loss — see CLAUDE.md invariant)
+      REST_ADVERTISED_HOST_NAME: connect
+      REST_PORT: ${CONNECT_REST_PORT:-8083}
+      PLUGIN_PATH: "/kafka/connect"
+    ports:
+      - "${CONNECT_REST_PORT:-8083}:8083"
+    volumes:
+      - connect-data:/kafka/connect-runtime-data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/connectors >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    logging: *default-logging
+
+  # ------------------------------------------------------------------
+  # MongoDB 7 — single-node replica set (dev simplification)
+  # ------------------------------------------------------------------
+  mongo:
+    image: mongo:7
+    container_name: zdt-mongo
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "${MONGO_REPLICA_SET:-rs0}", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Healthy once replica set is initialized (mongo-init runs once)
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' | grep -q 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *default-logging
+
+  # One-shot: initialize the single-node replica set. Exits after success.
+  mongo-init:
+    image: mongo:7
+    container_name: zdt-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        echo "Waiting for mongod..."
+        until mongosh --host mongo:27017 --quiet --eval 'db.adminCommand({ping:1}).ok' | grep -q 1; do sleep 1; done
+        STATE=$$(mongosh --host mongo:27017 --quiet --eval 'try { rs.status().ok } catch(e) { 0 }')
+        if [ "$$STATE" = "1" ]; then
+          echo "Replica set already initialized."
+          exit 0
+        fi
+        echo "Initiating replica set ${MONGO_REPLICA_SET:-rs0}..."
+        mongosh --host mongo:27017 --quiet --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "mongo:27017"}]})'
+        echo "Done."
+    logging: *default-logging
+
+volumes:
+  pg-data:
+  kafka-data:
+  mongo-data:
+  connect-data:

@@ -1,0 +1,91 @@
+# Overlay that adds observability, chaos injection, and load generation.
+# Use with:
+#   docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d
+#
+# Adds:
+#   - Prometheus (scrape + alerting)
+#   - Grafana (dashboards provisioned at container start)
+#   - kafka-exporter, postgres-exporter (immediate metrics sources)
+#   - Toxiproxy (network-layer fault injector, ADR-005)
+#   - k6 (on-demand, via `docker compose run --rm k6`)
+
+name: zdt-migration
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: zdt-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: zdt-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: zdt-kafka-exporter
+    restart: unless-stopped
+    command:
+      - "--kafka.server=kafka:29092"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: zdt-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    container_name: zdt-toxiproxy
+    restart: unless-stopped
+    ports:
+      - "8474:8474"     # admin API
+      - "19092:19092"   # proxied Kafka (chaos clients connect here)
+    command: ["-host=0.0.0.0", "-config=/etc/toxiproxy/proxies.json"]
+    volumes:
+      - ./observability/toxiproxy:/etc/toxiproxy:ro
+
+  # Run on-demand: `docker compose run --rm k6`
+  k6:
+    image: grafana/k6:0.51.0
+    profiles: ["load"]
+    volumes:
+      - ./load/k6:/scripts:ro
+    entrypoint: ["k6"]
+    command: ["run", "/scripts/write-mix.js"]
+
+volumes:
+  prometheus-data:
+  grafana-data:

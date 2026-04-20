@@ -1,0 +1,48 @@
+{
+  "name": "zdt-postgres-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "debezium",
+    "database.password": "debezium",
+    "database.dbname": "app",
+
+    "topic.prefix": "zdt",
+    "plugin.name": "pgoutput",
+    "slot.name": "zdt_slot",
+    "publication.name": "zdt_publication",
+    "publication.autocreate.mode": "disabled",
+
+    "snapshot.mode": "initial",
+    "table.include.list": "public.users,public.orders,public.order_items",
+
+    "heartbeat.interval.ms": "1000",
+
+    "tombstones.on.delete": "true",
+    "decimal.handling.mode": "double",
+    "time.precision.mode": "connect",
+
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "true",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "true",
+
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "zdt\\.public\\.(.*)",
+    "transforms.route.replacement": "cdc.$1",
+
+    "producer.override.acks": "all",
+    "producer.override.enable.idempotence": "true",
+    "producer.override.max.in.flight.requests.per.connection": "5",
+    "producer.override.compression.type": "lz4",
+
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "dlq.source",
+    "errors.deadletterqueue.context.headers.enable": "true",
+    "errors.deadletterqueue.topic.replication.factor": "1"
+  }
+}

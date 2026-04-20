@@ -1,0 +1,20 @@
+# Declarative SQL→Mongo mapping (see ADR-004).
+# Loaded by the transformer service at startup. Adding a new table = adding
+# a file here. No code change required.
+
+ruleSchemaVersion: 1
+source: public.users
+target: users
+schemaVersion: 1
+idStrategy: pk            # _id = "users:{id}"
+
+fields:
+  id:         { type: bigint,      target: _pkId }
+  email:      { type: string,      target: email, index: { kind: unique } }
+  full_name:  { type: string,      target: fullName }
+  profile:    { type: jsonb,       target: profile, embed: true }
+  is_active:  { type: boolean,     target: isActive, default: true }
+  created_at: { type: timestamptz, target: createdAt, format: iso8601, index: true }
+  updated_at: { type: timestamptz, target: updatedAt, format: iso8601 }
+
+# No joins for users — orders/order_items are linked via user_id on their side.

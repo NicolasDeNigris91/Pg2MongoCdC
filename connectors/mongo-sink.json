@@ -1,0 +1,29 @@
+{
+  "name": "zdt-mongo-sink",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+    "tasks.max": "1",
+
+    "topics.regex": "cdc\\..*",
+    "connection.uri": "mongodb://mongo:27017/?replicaSet=rs0",
+    "database": "migration",
+
+    "change.data.capture.handler": "com.mongodb.kafka.connect.sink.cdc.debezium.rdbms.postgres.PostgresHandler",
+
+    "topic.override.cdc.users.collection":       "users",
+    "topic.override.cdc.orders.collection":      "orders",
+    "topic.override.cdc.order_items.collection": "order_items",
+
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "true",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "true",
+
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "dlq.sink",
+    "errors.deadletterqueue.context.headers.enable": "true",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+
+    "max.batch.size": "500"
+  }
+}

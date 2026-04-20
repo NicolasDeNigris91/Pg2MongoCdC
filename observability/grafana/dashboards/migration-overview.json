@@ -1,0 +1,134 @@
+{
+  "title": "Migration Overview",
+  "uid": "zdt-migration-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "",
+  "editable": true,
+  "graphTooltip": 0,
+  "tags": ["zdt", "migration", "cdc"],
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Replication lag (p99)",
+      "description": "End-to-end seconds from Postgres commit to Mongo write. SLO: p99 < 5s.",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(migration_replication_lag_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Throughput per stage (events/sec)",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (stage) (rate(migration_events_processed_total[1m]))",
+          "legendFormat": "{{stage}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "DLQ depth",
+      "description": "Unprocessed messages across all DLQ topics. Should be 0.",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum(kafka_topic_partition_current_offset{topic=~\"dlq\\\\..*\"}) - sum(kafka_topic_partition_oldest_offset{topic=~\"dlq\\\\..*\"})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Consumer lag by group",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (consumergroup) (kafka_consumergroup_lag)",
+          "legendFormat": "{{consumergroup}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Sink write errors / idempotent skips",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(migration_write_errors_total[1m]))",
+          "legendFormat": "errors",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(migration_idempotent_skip_total[1m]))",
+          "legendFormat": "idempotent skips (expected on replay)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Postgres replication slot — retained WAL bytes",
+      "description": "If this grows without bound, Debezium is not consuming the slot.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "pg_replication_slots_pg_wal_lsn_diff",
+          "legendFormat": "{{slot_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    }
+  ]
+}

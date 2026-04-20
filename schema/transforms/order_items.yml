@@ -1,0 +1,18 @@
+# Present mostly so the transformer can maintain a compacted lookup topic
+# that the orders transform embeds from. order_items is NOT independently
+# written as its own Mongo collection in the default config — it only
+# materializes embedded inside orders documents.
+
+ruleSchemaVersion: 1
+source: public.order_items
+target: order_items
+schemaVersion: 1
+idStrategy: pk
+emit: lookup-only       # don't write a top-level collection; only compacted lookup
+
+fields:
+  id:          { type: bigint, target: _pkId }
+  order_id:    { type: bigint, target: orderId, index: true }
+  sku:         { type: string, target: sku }
+  qty:         { type: int,    target: qty }
+  price_cents: { type: bigint, target: priceCents }
