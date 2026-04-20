@@ -49,6 +49,14 @@ db.<collection>.deleteOne({ _id: "<table>:<pk>", sourceLsn: { $lt: event.lsn } }
 
 4. **The `$exists: false` branch handles first-write.** On the initial INSERT for a row there is no `sourceLsn` yet. Without the `$or`, the filter would reject the first write.
 
+## Implementation note — E11000 on upsert is a feature
+
+The filter `{_id, $or: [$lt, $exists:false]}` only *matches* docs that are older than the incoming event. When the stored doc has `sourceLsn >= event.lsn` (same-LSN replay or stale replay), the filter matches nothing. With `upsert=true`, Mongo then tries to INSERT a new document with `_id = "<table>:<pk>"` — and the unique `_id` index rejects it with error code **11000** (duplicate key).
+
+This is the correct behavior. Semantically: "the doc already reflects state at or newer than this event; the event is redundant." The sink treats E11000 from a BulkWrite as a successful idempotent no-op and moves on.
+
+The integration test in `services/sink/internal/writer/mongo_writer_integration_test.go` exercises all six ordering cases against a live Mongo (insert, same-LSN replay, newer update, stale replay, delete, stale delete after re-insert) and asserts the observable state after each. When it passes, ADR-002 is proven at the database level, not just at the filter-construction level.
+
 ## What this prevents
 
 - **Exact duplicates from consumer-group rebalance.** On rebalance, the same event may be redelivered. Filter rejects it; Mongo returns `matchedCount=0, modifiedCount=0`. No-op.
