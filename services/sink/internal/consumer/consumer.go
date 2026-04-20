@@ -16,11 +16,17 @@ import (
 
 // Record is the minimum view of a Kafka record the loop needs.
 // Offset is the per-partition position we may commit.
+//
+// Raw is an opaque handle the underlying KafkaConsumer can stash a
+// driver-specific object in (e.g. a *kgo.Record) so it can pass it back
+// on MarkCommit without the Loop needing to know the concrete type.
+// Tests leave it nil; the franz-go adapter sets it to the source record.
 type Record struct {
 	Key, Value []byte
 	Offset     int64
 	Partition  int32
 	Topic      string
+	Raw        any
 }
 
 // KafkaConsumer abstracts the Kafka client so tests can substitute a fake.

@@ -55,7 +55,18 @@ register_one() {
 }
 
 register_one "zdt-postgres-source" "$ROOT/connectors/debezium-postgres.json"
-register_one "zdt-mongo-sink"      "$ROOT/connectors/mongo-sink.json"
+
+# As of Week 2, the Mongo sink is our own Go service (services/sink/). The
+# off-the-shelf MongoDB Kafka Connector is kept on disk at
+# connectors/mongo-sink.json for historical comparison (chaos 01 lost 1
+# row against it — see docs/chaos-findings.md). To register the baseline
+# explicitly, set REGISTER_OFFSHELF_SINK=1.
+if [ "${REGISTER_OFFSHELF_SINK:-0}" = "1" ]; then
+  register_one "zdt-mongo-sink" "$ROOT/connectors/mongo-sink.json"
+else
+  # If a previous run registered it, drop it so it does not race with our Go sink.
+  curl -fsS -X DELETE "$CONNECT_URL/connectors/zdt-mongo-sink" 2>/dev/null || true
+fi
 
 echo ""
 echo "Connector status:"

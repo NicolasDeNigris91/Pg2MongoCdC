@@ -1,0 +1,7 @@
+# Keep the build context lean.
+Dockerfile
+.dockerignore
+*.md
+*_test.go
+**/*_test.go
+testdata/

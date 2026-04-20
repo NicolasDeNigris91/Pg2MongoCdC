@@ -56,11 +56,39 @@ Not run in this pass. Rationale: the current stack routes Debezium and the Mongo
 
 Fix is a one-line overlay (`docker-compose.chaos.yml`: set `BOOTSTRAP_SERVERS=toxiproxy:19092` for connect and the Week 2 services). Deferred to Week 3 cleanup so Week 2 can focus on the sink rewrite.
 
-## What's next
+## Week 2 results — Go sink in place
 
-1. **Week 2.** Replace the MongoDB Kafka Connector with `services/sink/` (Go + franz-go + mongo-go-driver). Implement commit-after-side-effect + LSN-gated upserts. Re-run chaos 01 and assert 0 loss.
-2. **Week 3.** Rewire `BOOTSTRAP_SERVERS` through Toxiproxy so chaos 02 has teeth. Add the k6 sidecar so `load/k6/write-mix.js` has a target.
-3. **Week 4.** CI workflow that runs the chaos suite on every commit.
+Second run of the chaos suite after replacing the off-the-shelf MongoDB Kafka Connector with our Go sink (`services/sink/`). Same harness, same SIGKILL-mid-stream scenario, on a clean-slate stack (`docker compose down -v` + full rebuild).
+
+Four consecutive iterations of chaos 01, cumulative load:
+
+| Iter | PG rows | Mongo docs | Status |
+|---|---|---|---|
+| 1 | 32  | 32  | **PASS** |
+| 2 | 62  | 62  | **PASS** |
+| 3 | 92  | 92  | **PASS** |
+| 4 | 122 | 122 | **PASS** |
+
+`verify-integrity.sh` returned exit 0 after every iteration and the final cumulative check. **Zero loss, zero duplicates, across four consecutive SIGKILL + restart cycles.**
+
+### What changed
+
+The Go sink implements commit-after-side-effect structurally (not via config):
+
+1. `kgo.DisableAutoCommit()` and `kgo.MetadataMaxAge(10s)` so offset commits are never implicit and pattern-subscription picks up fresh topics fast.
+2. `Loop.RunOnce` marks a record's offset with `MarkCommitRecords` only after `MongoWriter.Apply` returns nil. On write failure it `break`s the batch, calls `CommitMarked` (which commits only the records that succeeded), and returns the error so the caller backs off.
+3. `MongoWriter.Apply` builds a LSN-gated upsert (`{_id, $or: [$lt, $exists:false]}` filter, `$set` with `sourceLsn` and `schemaVersion`) and swallows E11000 duplicate-key errors from the upsert as idempotent no-ops — exactly the stale-replay case ADR-002 calls out.
+
+The integration test in `services/sink/internal/writer/mongo_writer_integration_test.go` already proved the LSN-gate at the database level across six ordering cases. The chaos run above proves the whole loop under a realistic crash.
+
+### A bug we found and fixed along the way
+
+First attempt used `kgo.MarkCommitOffsets(map[...]EpochOffset{..., Epoch: -1})` as the commit path. That compiled and tests with the fake consumer passed, but the real Kafka broker reported `CURRENT-OFFSET = -` indefinitely — meaning offsets were never actually being committed, and the sink was silently re-processing from the beginning of each topic on every restart. LSN-gating masked the correctness impact (idempotency is robust), but the work being done was wildly wasteful. Switching to the documented `MarkCommitRecords(*kgo.Record)` path (with the raw record carried through the Record abstraction as an opaque `Raw any` field) fixed it, and the consumer-group display stabilized.
+
+## What's still next
+
+1. **Week 3.** Rewire `BOOTSTRAP_SERVERS` through Toxiproxy so chaos 02 has teeth. Add the k6 sidecar so `load/k6/write-mix.js` has a target.
+2. **Week 4.** CI workflow that runs the chaos suite on every commit. Transformer service for non-trivial schema mappings (today the Debezium envelope flows straight through the sink without a mapping layer).
 
 ## Reproduction
 

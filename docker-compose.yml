@@ -180,6 +180,39 @@ services:
       retries: 20
     logging: *default-logging
 
+  # ------------------------------------------------------------------
+  # Week 2: our own Go sink with commit-after-side-effect + LSN-gated
+  # idempotent upserts. Replaces the off-the-shelf MongoDB Kafka
+  # Connector (which lost 1 row in chaos 01 — see docs/chaos-findings.md).
+  # ------------------------------------------------------------------
+  sink:
+    build:
+      context: ./services/sink
+    container_name: zdt-sink
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: "kafka:29092"
+      KAFKA_GROUP_ID: "zdt-sink"
+      KAFKA_TOPIC_REGEX: "^cdc\\..*"
+      MONGO_URI: "mongodb://mongo:27017/?replicaSet=rs0"
+      MONGO_DB: "migration"
+      METRICS_ADDR: ":8080"
+      SCHEMA_VERSION: "1"
+    ports:
+      - "8085:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *default-logging
+
   # One-shot: initialize the single-node replica set. Exits after success.
   mongo-init:
     image: mongo:7

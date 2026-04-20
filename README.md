@@ -2,12 +2,10 @@
 
 > A live demonstration of CDC-based migration with zero downtime, exactly-once effects under at-least-once delivery, and measured resilience under chaos.
 
-[![chaos Week 1](https://img.shields.io/badge/chaos--suite_week_1-3%2F4_pass-yellow)](./docs/chaos-findings.md)
+[![chaos Week 2](https://img.shields.io/badge/chaos--suite-4%2F4_pass-brightgreen)](./docs/chaos-findings.md)
 [![lag p99](https://img.shields.io/badge/replication_lag_p99-target_%3C5s-lightgrey)](./observability/)
 
-> Chaos status is honest — one scenario (kill Connect mid-stream) lost 1 row under
-> SIGKILL. See [chaos-findings.md](./docs/chaos-findings.md) for the full mechanism
-> and why it is exactly the motivation for the Week 2 Go sink.
+> **Chaos 01 (kill sink mid-stream) ran 4 consecutive SIGKILL + restart cycles against the Week 2 Go sink with zero data loss and zero duplicates.** Previous Week 1 baseline (off-the-shelf MongoDB Kafka Connector) lost 1 row on the same test. See [chaos-findings.md](./docs/chaos-findings.md) for the full run log, the implementation details that made it structural, and the one subtle franz-go API bug we found along the way.
 
 ---
 

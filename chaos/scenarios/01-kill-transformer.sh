@@ -9,7 +9,9 @@
 set -euo pipefail
 
 DURATION="${DURATION:-30}"
-TARGET="${TARGET:-connect}"   # change to 'transformer' once Week 2 lands
+# Default to our Week 2 Go sink now that it exists. Override with
+# TARGET=connect to replay the Week 1 baseline (off-the-shelf MongoSinkConnector).
+TARGET="${TARGET:-sink}"
 
 echo "Scenario 01: kill $TARGET mid-stream"
 echo "============================================"

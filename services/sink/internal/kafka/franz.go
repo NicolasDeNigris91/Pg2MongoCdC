@@ -68,18 +68,20 @@ func (f *FranzConsumer) Poll(ctx context.Context) ([]consumer.Record, error) {
 			Offset:    r.Offset,
 			Partition: r.Partition,
 			Topic:     r.Topic,
+			Raw:       r, // so MarkCommit can hand it back to MarkCommitRecords
 		})
 	})
 	return out, nil
 }
 
 func (f *FranzConsumer) MarkCommit(r consumer.Record) {
-	// franz-go's MarkCommitOffsets expects "next offset to consume" = current + 1.
-	f.client.MarkCommitOffsets(map[string]map[int32]kgo.EpochOffset{
-		r.Topic: {
-			r.Partition: kgo.EpochOffset{Offset: r.Offset + 1, Epoch: -1},
-		},
-	})
+	// Use franz-go's documented MarkCommitRecords path — it wires through the
+	// same group-session epoch tracking that CommitMarkedOffsets expects.
+	// Our previous attempt with MarkCommitOffsets(Epoch:-1) silently failed
+	// to commit (kafka-consumer-groups reported CURRENT-OFFSET=- forever).
+	if raw, ok := r.Raw.(*kgo.Record); ok && raw != nil {
+		f.client.MarkCommitRecords(raw)
+	}
 }
 
 func (f *FranzConsumer) CommitMarked(ctx context.Context) error {
