@@ -78,9 +78,12 @@ services:
       - ./observability/toxiproxy:/etc/toxiproxy:ro
 
   # Run on-demand: `docker compose run --rm k6`
+  # Caller can override: `... run --rm -e BASE=http://loadgen:8080 k6 run --vus 20 --duration 30s /scripts/write-mix.js`
   k6:
     image: grafana/k6:0.51.0
     profiles: ["load"]
+    environment:
+      BASE: "http://loadgen:8080"
     volumes:
       - ./load/k6:/scripts:ro
     entrypoint: ["k6"]

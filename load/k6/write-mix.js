@@ -17,7 +17,10 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
 
-const BASE      = __ENV.BASE      || 'http://localhost:8085';
+// Inside the chaos overlay, k6 runs as a container on the zdt-migration
+// network and reaches the sidecar as 'loadgen:8080'. When running k6
+// from the host, override with --env BASE=http://localhost:8086.
+const BASE      = __ENV.BASE      || 'http://loadgen:8080';
 const PCT_INS   = Number(__ENV.PCT_INS   || 70);
 const PCT_UPD   = Number(__ENV.PCT_UPD   || 20);
 // DELETE = remainder

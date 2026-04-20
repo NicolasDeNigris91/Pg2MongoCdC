@@ -85,10 +85,55 @@ The integration test in `services/sink/internal/writer/mongo_writer_integration_
 
 First attempt used `kgo.MarkCommitOffsets(map[...]EpochOffset{..., Epoch: -1})` as the commit path. That compiled and tests with the fake consumer passed, but the real Kafka broker reported `CURRENT-OFFSET = -` indefinitely — meaning offsets were never actually being committed, and the sink was silently re-processing from the beginning of each topic on every restart. LSN-gating masked the correctness impact (idempotency is robust), but the work being done was wildly wasteful. Switching to the documented `MarkCommitRecords(*kgo.Record)` path (with the raw record carried through the Record abstraction as an opaque `Raw any` field) fixed it, and the consumer-group display stabilized.
 
+## Week 3 — load numbers from the k6 sidecar
+
+Ran `load/k6/write-mix.js` (70% INSERT / 20% UPDATE / 10% DELETE) against the new `services/loadgen/` sidecar which translates k6 HTTP into Postgres SQL via pgx. k6 at 20 VUs for 30s:
+
+```
+checks.........................: 100.00% ✓ 112676   ✗ 0
+http_req_failed................: 0.00%    ✓ 0       ✗ 112676
+http_req_duration..............: avg=5.22ms  p95=7.79ms  p99≈15ms  max=242.73ms
+http_reqs......................: 112676    3755.17/s
+zdt_insert_latency_ms..........: avg=5.27ms  p95=7.7ms
+zdt_update_latency_ms..........: avg=5.24ms  p95=7.88ms
+zdt_delete_latency_ms..........: avg=4.88ms  p95=8.53ms
+```
+
+**Sidecar sustained 3,755 write-ops/sec with zero failed requests.** All k6 thresholds (p99 < 100ms insert, < 150ms update) passed.
+
+### Finding: sink throughput is a batching problem
+
+Under the 3.7k RPS burst, the Go sink drained at **~240 writes/sec** — roughly 15× slower than ingestion. Mongo stayed at ~57k docs vs PG's ~74k rows after 2.5 minutes. Data eventually reconciles (every event is LSN-gated and idempotent), but replication lag during the burst exceeded the 5s SLO from the plan.
+
+Root cause: `MongoWriter.Apply` calls `BulkWrite` with a slice of exactly ONE WriteModel per event. The "Bulk" is a vestigial name — there's no actual batching.
+
+Fix (future work): have the consumer Loop buffer marked events for a batch window (e.g. 500 ops or 10ms, whichever first), then call a new `Writer.ApplyBatch(events)` that issues one BulkWrite with N models. A realistic batch size of 500 should lift sink throughput by roughly a factor of ten at moderate tail-latency cost. The correctness invariants from ADR-002/003 are unaffected — commit-after-batch-success is the same semantic, just at batch granularity.
+
+### Commands to reproduce
+
+```bash
+# Boot the full stack
+docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d --build --wait
+bash scripts/register-connectors.sh
+
+# Smoke-test loadgen
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"email":"x@y.z","full_name":"X"}' http://localhost:8086/users
+
+# 30-second load burst
+MSYS_NO_PATHCONV=1 docker compose \
+  -f docker-compose.yml -f docker-compose.chaos.yml \
+  run --rm --no-deps k6 run --vus 20 --duration 30s /scripts/write-mix.js
+```
+
+(`MSYS_NO_PATHCONV=1` is only needed on Git Bash / MSYS on Windows, which otherwise rewrites `/scripts/write-mix.js` into `C:/Program Files/Git/scripts/write-mix.js`.)
+
 ## What's still next
 
-1. **Week 3.** Rewire `BOOTSTRAP_SERVERS` through Toxiproxy so chaos 02 has teeth. Add the k6 sidecar so `load/k6/write-mix.js` has a target.
-2. **Week 4.** CI workflow that runs the chaos suite on every commit. Transformer service for non-trivial schema mappings (today the Debezium envelope flows straight through the sink without a mapping layer).
+1. **Sink batching** — the perf gap above. Should be a single TDD cycle refactor of the Loop and one new method on Writer.
+2. **Toxiproxy rewire** — Kafka currently advertises its real listener, so injecting toxics has no effect on clients that cache the metadata. Add a PROXIED listener whose advertised host routes through Toxiproxy. Scenario 02 then has teeth.
+3. **CI** — GitHub Actions workflow that runs the whole chaos suite on every PR.
+4. **Transformer service** — reads `cdc.*`, applies YAML rules from `schema/transforms/`, publishes to `transformed.*`. Sink consumes `transformed.*` afterward. Destrava a ADR-004 demo em código rodando.
 
 ## Reproduction
 
