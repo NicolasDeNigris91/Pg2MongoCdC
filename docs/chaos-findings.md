@@ -162,12 +162,159 @@ MSYS_NO_PATHCONV=1 docker compose \
 
 (`MSYS_NO_PATHCONV=1` is only needed on Git Bash / MSYS on Windows, which otherwise rewrites `/scripts/write-mix.js` into `C:/Program Files/Git/scripts/write-mix.js`.)
 
+## v1.0 polish — silent transformer hang on cold start (closed)
+
+While preparing for v1.0 release we noticed the GitHub Actions
+`integration-stack` job had been failing on **every** push since the CI
+workflow was added. Locally, after a `docker compose down -v + up`
+cycle, the pipeline appeared healthy — every container reported
+`healthy` — but no record ever made it from Postgres to MongoDB.
+
+### Symptom (operational reproducer)
+
+```bash
+docker compose down -v
+docker compose up -d --wait
+bash scripts/register-connectors.sh
+
+# All containers healthy.
+# Insert one row into Postgres:
+docker compose exec -T postgres psql -U app -d app \
+  -c "INSERT INTO users (email, full_name) VALUES ('x@y.z', 'X');"
+
+# Wait. And wait. The row never appears in Mongo.
+docker compose exec -T mongo mongosh --quiet \
+  mongodb://localhost:27017/?replicaSet=rs0 \
+  --eval "db.getSiblingDB('migration').users.countDocuments()"
+# -> 2  (the 2 seed rows from 001_init.sql; the inserted row is missing)
+
+# Topic transformed.users does not exist.
+docker compose exec -T kafka kafka-topics \
+  --bootstrap-server localhost:9092 --list | grep transformed
+# -> (empty)
+
+# Consumer group looks normal — Stable, 1 member, 1 partition assigned —
+# but CURRENT-OFFSET is "-" forever.
+```
+
+### Investigation
+
+Adding instrumentation logs around `client.PollFetches`,
+`m.ApplyJSON`, and `client.ProduceSync` in
+`services/transformer/cmd/transformer/main.go::runOnce` revealed:
+
+```
+DIAG: runOnce: PollFetches returned, NumRecords=105
+DIAG: rec[1] mapping topic=cdc.users value-bytes=3600
+DIAG: rec[1] mapped, ProduceSync target=transformed.users bytes=3599
+   <silence — process spins forever>
+```
+
+`ProduceSync` to a not-yet-existent `transformed.users` topic blocks
+indefinitely. Manually creating the topic
+(`kafka-topics --create --topic transformed.users …`) immediately
+unblocked the producer and the entire 105-record backlog drained in
+under a second.
+
+### Root cause
+
+Two configurations are required for auto-topic-creation to work:
+
+1. **Broker side**: `auto.create.topics.enable=true` (we had this).
+2. **Client side**: the producer must *ask* for auto-creation by setting
+   the `allow_auto_topic_creation` flag in metadata + produce requests.
+
+By default, franz-go does **not** set this flag. cp-kafka 7.6.1 in
+KRaft mode only auto-creates a topic when it sees a request that
+explicitly asks for it. The broker setting is necessary but not
+sufficient.
+
+Result: `ProduceSync` waited for metadata that the broker would never
+proactively populate. No error, no log, no metric — a silent hang.
+
+### Fix
+
+One line, in `services/transformer/cmd/transformer/main.go`:
+
+```go
+client, err := kgo.NewClient(
+    // ...existing options...
+    kgo.AllowAutoTopicCreation(),  // <-- this
+)
+```
+
+### Re-measure
+
+End-to-end on a clean state:
+
+```bash
+docker compose down -v
+docker compose up -d --build --wait
+bash scripts/register-connectors.sh
+docker compose exec -T postgres psql -U app -d app -c \
+  "INSERT INTO users (email, full_name) SELECT 'v'||g||'@x.dev','V'||g \
+   FROM generate_series(1,5) g;"
+sleep 8
+docker compose exec -T mongo mongosh --quiet \
+  mongodb://localhost:27017/?replicaSet=rs0 \
+  --eval "db.getSiblingDB('migration').users.countDocuments()"
+# -> 7  (2 seed + 5 inserted)
+```
+
+`transformed.users` is auto-created on first produce. No manual step.
+
+### A larger finding hiding behind this one
+
+Earlier exploratory testing had reported a small, persistent drift
+(~300 docs Mongo > Postgres) after consecutive scenario 01 runs. The
+drift was attributed to a possible BulkWrite reordering bug and was
+opened as an investigation thread. **It was not a separate bug.**
+
+After landing the auto-create fix and re-running scenario 01 four
+consecutive times against a clean stack:
+
+| Iteration | PG rows | Mongo docs | Status |
+|---|---|---|---|
+| 1 | 237 | 237 | **PASS** |
+| 2 | 267 | 267 | **PASS** |
+| 3 | 297 | 297 | **PASS** |
+| 4 | 327 | 327 | **PASS** |
+
+Hash match every iteration. The previously-observed drift was a
+downstream symptom of the cold-start hang — events that should have
+been processed during recovery were lost because the transformer was
+silently stuck on producing the first record after restart, not because
+of any fault in the LSN gate or the BulkWrite path.
+
+### What this teaches
+
+Two things worth carrying forward into operations:
+
+1. **A "healthy" container check is not a "working" check.** The
+   transformer's `/healthz` returned 200 the entire time it was
+   producing zero records. Healthcheck wired to `/healthz` masked the
+   real failure. Production should add a deeper readiness signal —
+   e.g. "no committed offset progress in 60s" — and surface it as an
+   alert.
+2. **Default configurations can have asymmetric requirements between
+   client and broker.** When two settings together are needed, having
+   one alone produces silent failure modes that are very expensive to
+   debug. Worth a one-time audit of every other client option in the
+   stack against its broker counterpart.
+
 ## What's still next
 
-1. **Sink batching** — the perf gap above. Should be a single TDD cycle refactor of the Loop and one new method on Writer.
-2. **Toxiproxy rewire** — Kafka currently advertises its real listener, so injecting toxics has no effect on clients that cache the metadata. Add a PROXIED listener whose advertised host routes through Toxiproxy. Scenario 02 then has teeth.
-3. **CI** — GitHub Actions workflow that runs the whole chaos suite on every PR.
-4. **Transformer service** — reads `cdc.*`, applies YAML rules from `schema/transforms/`, publishes to `transformed.*`. Sink consumes `transformed.*` afterward. Destrava a ADR-004 demo em código rodando.
+1. **CI runs the full chaos suite on PR labels.** Today CI runs
+   `unit + integration-mongo + integration-stack`. Adding a
+   `chaos-suite` job behind a `run-chaos` PR label closes the loop
+   without paying ~5 min per push.
+2. **Shipping a Helm chart** in `deploy/helm/` so deploy artifact
+   demonstrates production-shape topology (RF=3 Kafka, 3-node Mongo
+   replica set), not the dev-grade compose used for local demos.
+3. **`docs/operations.md` + `docs/runbook.md` per-alert.** The runbook
+   skeleton exists; populating it with the alerts we now know to
+   watch (cold-start hang, replication lag, sink consumer-group lag)
+   is the next iteration.
 
 ## Reproduction
 

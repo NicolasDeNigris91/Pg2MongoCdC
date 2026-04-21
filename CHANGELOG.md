@@ -31,12 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to the transformer's client config. Verified by `down -v + up + insert + verify`
   end-to-end against a clean stack.
 
-### Known Issues
-- Under scenario 01 reruns (consecutive sink SIGKILLs during loadgen write
-  traffic), Postgres↔MongoDB row counts can drift by a small number of rows
-  in a Mongo-has-more-than-Postgres direction. Root cause under investigation;
-  initial reordering hypothesis was ruled out by an integration-level test.
-  See the GitHub issue tracker for reproducer and current status.
+### Investigation Notes
+
+- Earlier exploratory runs reported a small, persistent drift
+  (~300 docs Mongo > Postgres) after consecutive scenario 01 runs.
+  After landing the auto-topic-creation fix above, four consecutive
+  scenario 01 runs against a clean stack produced
+  `INTEGRITY OK` every iteration with hash match. The previously-observed
+  drift was a downstream symptom of the cold-start hang, not a separate
+  bug. See [`docs/chaos-findings.md`](./docs/chaos-findings.md) for
+  the full investigation writeup.
 
 ---
 
