@@ -145,10 +145,14 @@ Weeks 1-4 + polish pass complete. See [docs/plan.md](./docs/plan.md) for the per
 
 ## Documentation
 
-- [docs/plan.md](./docs/plan.md) — Per-phase delivery plan and exit criteria.
 - [docs/architecture.md](./docs/architecture.md) — Component diagram and data flow.
+- [docs/deployment.md](./docs/deployment.md) — Production deployment to Kubernetes (Helm), pre-requisites, secrets.
+- [docs/operations.md](./docs/operations.md) — Day-to-day ops: deploys, scaling, capacity, incident response.
+- [docs/runbook.md](./docs/runbook.md) — Per-alert response procedures.
+- [docs/security.md](./docs/security.md) — Threat model, defense-in-depth, secrets management.
+- [docs/slo.md](./docs/slo.md) — SLI / SLO definitions and error budgets.
 - [docs/chaos-findings.md](./docs/chaos-findings.md) — Chaos suite findings in `Finding → Fix → Re-measure` format.
-- [docs/runbook.md](./docs/runbook.md) — Operator runbook for common incidents.
+- [docs/plan.md](./docs/plan.md) — Per-phase delivery plan and exit criteria.
 - [docs/decisions/](./docs/decisions/) — Architecture Decision Records.
 - [CHANGELOG.md](./CHANGELOG.md) — Version history (Keep a Changelog format).
 - [SECURITY.md](./SECURITY.md) — Vulnerability disclosure process.
