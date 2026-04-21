@@ -11,6 +11,113 @@ concurrency:
 
 jobs:
 
+  # Static analysis across all Go services. Runs in parallel with unit so
+  # feedback comes in ~30s either way, and one doesn't block the other.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+          cache-dependency-path: |
+            services/sink/go.sum
+            services/transformer/go.sum
+            services/loadgen/go.sum
+
+      - name: golangci-lint — sink
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: services/sink
+          args: --config=${{ github.workspace }}/.golangci.yml
+
+      - name: golangci-lint — transformer
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: services/transformer
+          args: --config=${{ github.workspace }}/.golangci.yml
+
+      - name: golangci-lint — loadgen
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: services/loadgen
+          args: --config=${{ github.workspace }}/.golangci.yml
+
+  # Trivy scans Dockerfiles for misconfigurations (root user, missing
+  # HEALTHCHECK, :latest base images, …) and the filesystem for known
+  # CVEs in pinned dependencies. HIGH+CRITICAL fail the build.
+  trivy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: trivy — Dockerfile misconfig scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          hide-progress: true
+
+      - name: trivy — dependency CVE scan (sink)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: services/sink
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          hide-progress: true
+          ignore-unfixed: true
+
+      - name: trivy — dependency CVE scan (transformer)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: services/transformer
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          hide-progress: true
+          ignore-unfixed: true
+
+      - name: trivy — dependency CVE scan (loadgen)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: services/loadgen
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          hide-progress: true
+          ignore-unfixed: true
+
+  # Go source security scan across all services. gosec catches the subset
+  # of security-relevant bugs (weak crypto, unsafe SQL, open files without
+  # close, etc.) that a generic lint does not flag.
+  gosec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: gosec — sink
+        uses: securego/gosec@master
+        with:
+          args: "-exclude-dir=services/sink/vendor -fmt=text ./services/sink/..."
+      - name: gosec — transformer
+        uses: securego/gosec@master
+        with:
+          args: "-exclude-dir=services/transformer/vendor -fmt=text ./services/transformer/..."
+      - name: gosec — loadgen
+        uses: securego/gosec@master
+        with:
+          args: "-exclude-dir=services/loadgen/vendor -fmt=text ./services/loadgen/..."
+
   # Fast feedback: go test + vet + build for both services, plus shell-syntax
   # check and compose-config validation. Should finish in ~60s.
   unit:
@@ -25,10 +132,18 @@ jobs:
           cache: true
           cache-dependency-path: |
             services/sink/go.sum
+            services/transformer/go.sum
             services/loadgen/go.sum
 
       - name: sink — test, vet, build
         working-directory: services/sink
+        run: |
+          go test ./...
+          go vet ./...
+          go build ./...
+
+      - name: transformer — test, vet, build
+        working-directory: services/transformer
         run: |
           go test ./...
           go vet ./...

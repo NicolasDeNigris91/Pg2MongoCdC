@@ -2,6 +2,9 @@
 
 > Migration from Postgres to MongoDB without stopping writes. The off-the-shelf MongoDB Kafka Connector lost **1 row in ~30** under a single SIGKILL; the Go rewrite in this repo survives **4 consecutive kill-cycles with 0 loss and 0 duplicates**. Every number below is from a real run, reproducible with `docker compose up`.
 
+[![CI](https://github.com/NicolasDeNigris91/Pg2MongoCdC/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/NicolasDeNigris91/Pg2MongoCdC/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![chaos](https://img.shields.io/badge/chaos--suite-4%2F4_pass-brightgreen)](./docs/chaos-findings.md)
 [![throughput](https://img.shields.io/badge/sink_drain_rate-%E2%89%A57.3k%20w%2Fs-brightgreen)](./docs/chaos-findings.md)
 [![k6](https://img.shields.io/badge/k6_sustained-3.7k%20RPS%20%7C%200%20failures-brightgreen)](./docs/chaos-findings.md)
@@ -133,4 +136,31 @@ A senior engineer knows what NOT to build. These omissions are signals, not gaps
 
 ## Project status
 
-Weeks 1-4 + polish pass complete. See [docs/plan.md](./docs/plan.md) for the per-phase exit criteria and the commits that delivered each.
+Weeks 1-4 + polish pass complete. See [docs/plan.md](./docs/plan.md) for the per-phase exit criteria and the commits that delivered each. Upcoming changes are listed in [CHANGELOG.md](./CHANGELOG.md).
+
+**Known limitations** (see the "Trade-offs" section above):
+- Single-DC demo. Multi-region would require MirrorMaker 2 (out of scope).
+- Dev compose relaxes `min.insync.replicas=2` / `RF=3` for laptop resource reasons. Production compose restores them; see [CLAUDE.md](./CLAUDE.md).
+- Secrets via `.env` for local dev only. Production requires Vault / AWS Secrets Manager / External Secrets. See [SECURITY.md](./SECURITY.md).
+
+## Documentation
+
+- [docs/plan.md](./docs/plan.md) — Per-phase delivery plan and exit criteria.
+- [docs/architecture.md](./docs/architecture.md) — Component diagram and data flow.
+- [docs/chaos-findings.md](./docs/chaos-findings.md) — Chaos suite findings in `Finding → Fix → Re-measure` format.
+- [docs/runbook.md](./docs/runbook.md) — Operator runbook for common incidents.
+- [docs/decisions/](./docs/decisions/) — Architecture Decision Records.
+- [CHANGELOG.md](./CHANGELOG.md) — Version history (Keep a Changelog format).
+- [SECURITY.md](./SECURITY.md) — Vulnerability disclosure process.
+
+## Security
+
+See [SECURITY.md](./SECURITY.md) for vulnerability disclosure process and response timelines.
+
+## Contributing
+
+Issues and pull requests welcome. Conventional Commits format expected on commit messages (`feat(sink):`, `fix(chaos):`, `docs(plan):`, `ci:`, `polish:`). Every transform rule change needs a test in `services/transformer/internal/mapper/mapper_test.go`. Every chaos scenario needs a `# PASS:` criterion comment.
+
+## License
+
+[MIT](./LICENSE) — see the file for the full text.
