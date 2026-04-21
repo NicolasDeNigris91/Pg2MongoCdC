@@ -22,15 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `chaos/verify-integrity.sh` now polls for drain convergence (2s interval,
   60s default timeout) instead of a static 10s `sleep`, eliminating false
   `INTEGRITY FAILED` reports under moderate post-load drain (commit `810539c`).
+- **Transformer indefinite hang on first record after `down -v + up`**:
+  the kgo client did not request auto-topic-creation from the broker, so
+  ProduceSync to a not-yet-existent `transformed.<table>` topic would hang
+  forever even though `auto.create.topics.enable=true` was set on the
+  broker. KRaft-mode brokers (cp-kafka 7.6.1+) only auto-create when the
+  client request explicitly asks for it. Added `kgo.AllowAutoTopicCreation()`
+  to the transformer's client config. Verified by `down -v + up + insert + verify`
+  end-to-end against a clean stack.
 
 ### Known Issues
 - Under scenario 01 reruns (consecutive sink SIGKILLs during loadgen write
   traffic), Postgres↔MongoDB row counts can drift by a small number of rows
   in a Mongo-has-more-than-Postgres direction. Root cause under investigation;
   initial reordering hypothesis was ruled out by an integration-level test.
-  A transformer cold-start consumer-rebalance issue was discovered during
-  the investigation and is a stronger candidate. See the GitHub issue
-  tracker for reproducer and current status.
+  See the GitHub issue tracker for reproducer and current status.
 
 ---
 

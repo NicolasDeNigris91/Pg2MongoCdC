@@ -55,6 +55,13 @@ func main() {
 		kgo.MetadataMaxAge(10*time.Second),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
 		kgo.ProducerBatchMaxBytes(16*1024*1024),
+		// Set the auto-create flag on metadata + produce requests. Without
+		// this, producing to a not-yet-existent transformed.<table> topic
+		// hangs ProduceSync indefinitely on KRaft brokers (cp-kafka 7.6.1+),
+		// even with broker-side auto.create.topics.enable=true. The broker
+		// only auto-creates when it sees a request that explicitly asks for
+		// it. See investigation in commit history (round 2 of v1 polish).
+		kgo.AllowAutoTopicCreation(),
 	)
 	if err != nil {
 		// Boot-time fatal. Process exit lets the OS reclaim the signal
