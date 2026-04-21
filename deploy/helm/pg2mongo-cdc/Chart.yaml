@@ -1,0 +1,44 @@
+apiVersion: v2
+name: pg2mongo-cdc
+description: |
+  Idempotent Postgres → MongoDB CDC pipeline (Debezium + Kafka + Go services).
+  Deploys the three pipeline components — Kafka Connect with the Debezium
+  PostgreSQL connector, the Go transformer, and the Go LSN-gated sink — as
+  distinct Deployments with Horizontal Pod Autoscalers keyed on per-service
+  consumer group lag.
+
+  This chart assumes the data plane (Postgres, Kafka, Schema Registry, MongoDB)
+  is provisioned externally (managed services or separate cluster operators).
+  The chart deploys ONLY the pipeline workers; it does not provision Kafka,
+  Mongo, or Postgres itself.
+
+  See docs/deployment.md in the source repo for the full operator runbook
+  this chart was designed for.
+
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+kubeVersion: ">= 1.28.0-0"
+
+home: https://github.com/NicolasDeNigris91/Pg2MongoCdC
+sources:
+  - https://github.com/NicolasDeNigris91/Pg2MongoCdC
+
+keywords:
+  - postgres
+  - mongodb
+  - debezium
+  - kafka
+  - cdc
+  - change-data-capture
+  - migration
+
+maintainers:
+  - name: Nicolas De Nigris
+    email: nicolas.denigris91@icloud.com
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial chart release for v1.0.0 of the pipeline.

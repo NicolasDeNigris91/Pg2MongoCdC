@@ -134,9 +134,34 @@ A senior engineer knows what NOT to build. These omissions are signals, not gaps
 | Go 1.22+ (only to rebuild services or run `go test` locally) | <https://go.dev/dl/> |
 | k6 (optional — dockerised via chaos overlay) | <https://k6.io/docs/get-started/installation/> |
 
+## Production deployment
+
+The `docker-compose.yml` in the repo root is for local development; it
+deliberately violates several production invariants for laptop reasons.
+Two artifacts ship with the v1.0 release for real deployments:
+
+- **Helm chart** at [`deploy/helm/pg2mongo-cdc/`](./deploy/helm/pg2mongo-cdc/) — deploys
+  the three pipeline workers (Connect, transformer, sink) to Kubernetes.
+  Includes HPAs keyed on consumer-group lag, network policies, PodMonitor
+  for prometheus-operator, anti-affinity, and locked-down pod security
+  context. Data plane (Postgres / Kafka / Mongo / Schema Registry) is
+  expected to come from managed services or separate operators — see
+  [`docs/deployment.md`](./docs/deployment.md).
+- **`docker-compose.prod.yml`** — declarative reference of the
+  production data-plane topology (Kafka RF=3 + ISR=2, 3-node Mongo
+  replica set, Postgres with `wal_level=logical` and WAL archive).
+  Not meant to run on a laptop; intended as a diffable spec.
+
+```bash
+helm install pg2mongo-cdc deploy/helm/pg2mongo-cdc \
+  --namespace pg2mongo-cdc --create-namespace \
+  -f values.production.yaml
+```
+
 ## Project status
 
-Weeks 1-4 + polish pass complete. See [docs/plan.md](./docs/plan.md) for the per-phase exit criteria and the commits that delivered each. Upcoming changes are listed in [CHANGELOG.md](./CHANGELOG.md).
+v1.0.0 released. See [CHANGELOG.md](./CHANGELOG.md) for the full history
+and [docs/plan.md](./docs/plan.md) for per-phase exit criteria.
 
 **Known limitations** (see the "Trade-offs" section above):
 - Single-DC demo. Multi-region would require MirrorMaker 2 (out of scope).

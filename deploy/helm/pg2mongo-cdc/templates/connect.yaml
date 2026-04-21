@@ -1,0 +1,144 @@
+{{- if .Values.connect.enabled -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pg2mongo-cdc.fullname" . }}-connect
+  labels:
+    {{- include "pg2mongo-cdc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: connect
+spec:
+  replicas: {{ .Values.connect.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "pg2mongo-cdc.selectorLabels" (list . "connect") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pg2mongo-cdc.selectorLabels" (list . "connect") | nindent 8 }}
+        {{- with .Values.connect.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.connect.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "pg2mongo-cdc.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: connect
+          image: "{{ .Values.image.registry }}/{{ .Values.image.connectRepository }}:{{ include "pg2mongo-cdc.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Connect's Java runtime needs a writable layer for compiled classes;
+          # readOnlyRootFilesystem is therefore false here, in tension with the
+          # platform's restricted PSS. Mitigation: empty-dir scratch volume,
+          # non-root UID, all other restrictions intact.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+          ports:
+            - name: rest
+              containerPort: 8083
+              protocol: TCP
+          env:
+            - name: BOOTSTRAP_SERVERS
+              value: {{ .Values.kafka.bootstrapServers | quote }}
+            - name: GROUP_ID
+              value: {{ printf "%s-connect" .Release.Name | quote }}
+            - name: CONFIG_STORAGE_TOPIC
+              value: {{ .Values.connect.configStorageTopic | quote }}
+            - name: OFFSET_STORAGE_TOPIC
+              value: {{ .Values.connect.offsetStorageTopic | quote }}
+            - name: STATUS_STORAGE_TOPIC
+              value: {{ .Values.connect.statusStorageTopic | quote }}
+            - name: CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "3"
+            - name: OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "3"
+            - name: STATUS_STORAGE_REPLICATION_FACTOR
+              value: "3"
+            - name: KAFKA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.kafka.credentialsSecret }}
+                  key: username
+            - name: KAFKA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.kafka.credentialsSecret }}
+                  key: password
+          livenessProbe:
+            httpGet:
+              path: /
+              port: rest
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 4
+          readinessProbe:
+            httpGet:
+              path: /connectors
+              port: rest
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.connect.resources | nindent 12 }}
+      {{- with .Values.connect.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.connect.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.connect.affinity }}
+      affinity:
+        {{- toYaml .Values.connect.affinity | nindent 8 }}
+      {{- else }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "pg2mongo-cdc.selectorLabels" (list . "connect") | nindent 20 }}
+      {{- end }}
+      # Distributed-mode workers coordinate via the connect-* internal Kafka
+      # topics; rebalance can take ~30s when a worker leaves. Match the grace
+      # period so in-flight task migration completes cleanly.
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pg2mongo-cdc.fullname" . }}-connect
+  labels:
+    {{- include "pg2mongo-cdc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: connect
+spec:
+  type: ClusterIP
+  ports:
+    - name: rest
+      port: 8083
+      targetPort: rest
+      protocol: TCP
+  selector:
+    {{- include "pg2mongo-cdc.selectorLabels" (list . "connect") | nindent 4 }}
+{{- end }}

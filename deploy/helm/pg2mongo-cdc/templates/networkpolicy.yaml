@@ -1,0 +1,139 @@
+{{- if .Values.networkPolicy.enabled -}}
+{{/*
+Network policies. Default is deny-all per workload, then explicit allow for
+the specific egress paths each component needs. Pattern follows the
+defense-in-depth model in docs/security.md — every connection between
+pipeline workers and the data plane is enumerated, nothing is permitted by
+omission.
+*/}}
+---
+# Transformer egress: Kafka only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "pg2mongo-cdc.fullname" . }}-transformer
+  labels:
+    {{- include "pg2mongo-cdc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: transformer
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "pg2mongo-cdc.selectorLabels" (list . "transformer") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Metrics scraping by Prometheus.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.metricsAllowFromPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Kafka brokers (typical 9092). Adjust if your brokers use other ports.
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+    # DNS — required for service discovery.
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Sink egress: Kafka + Mongo.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "pg2mongo-cdc.fullname" . }}-sink
+  labels:
+    {{- include "pg2mongo-cdc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sink
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "pg2mongo-cdc.selectorLabels" (list . "sink") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.metricsAllowFromPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+    # MongoDB — typical 27017; SRV/Atlas may add 27018-27019.
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 27017
+        - protocol: TCP
+          port: 27018
+        - protocol: TCP
+          port: 27019
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- if .Values.connect.enabled }}
+---
+# Connect egress: Kafka + Postgres.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "pg2mongo-cdc.fullname" . }}-connect
+  labels:
+    {{- include "pg2mongo-cdc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: connect
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "pg2mongo-cdc.selectorLabels" (list . "connect") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Operator API (curl-able from a kubectl exec / port-forward).
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 8083
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+    # Postgres (5432) and Schema Registry (typical 8081).
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8081
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
+{{- end -}}

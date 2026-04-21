@@ -1,0 +1,276 @@
+# Production-shape Compose topology.
+#
+# !!! NOT MEANT TO RUN ON A LAPTOP !!!
+#
+# This file is a *reference* for the data-plane topology a real deployment
+# needs. It shows what RF=3 Kafka + 3-node Mongo replica set + production
+# Postgres look like, with the same images and config knobs as the dev
+# compose. It is shaped this way deliberately so a reviewer can:
+#
+#   1. See in a single file what the production topology actually is.
+#   2. Diff it against docker-compose.yml to see exactly which knobs the
+#      dev compose relaxes (and why — see CLAUDE.md "Hard invariants").
+#   3. Boot it on a beefy VM (>= 16 vCPU, 32 GB RAM, NVMe storage) for
+#      pre-prod validation if managed services are not yet provisioned.
+#
+# The intended production deployment is via the Helm chart at
+# deploy/helm/pg2mongo-cdc/, against external (managed) data-plane services.
+# Not via this compose file.
+
+x-kafka-base: &kafka-base
+  image: confluentinc/cp-kafka:7.6.1
+  environment: &kafka-base-env
+    KAFKA_PROCESS_ROLES: "broker,controller"
+    KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093"
+    KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:29092"
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT"
+    KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+    KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+    # Production invariants (CLAUDE.md #5):
+    KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    KAFKA_MIN_INSYNC_REPLICAS: 2
+    # Auto-create disabled in production — topics are managed by operators
+    # so accidental typos in client code don't silently create garbage topics.
+    KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 3000
+  healthcheck:
+    test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 60s
+
+services:
+  # ---------------------------------------------------------------------------
+  # Kafka cluster — 3 brokers, RF=3, ISR>=2.
+  # ---------------------------------------------------------------------------
+  kafka-1:
+    <<: *kafka-base
+    container_name: zdt-kafka-1
+    environment:
+      <<: *kafka-base-env
+      KAFKA_NODE_ID: 1
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-1:9092,INTERNAL://kafka-1:29092"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
+
+  kafka-2:
+    <<: *kafka-base
+    container_name: zdt-kafka-2
+    environment:
+      <<: *kafka-base-env
+      KAFKA_NODE_ID: 2
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-2:9092,INTERNAL://kafka-2:29092"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+
+  kafka-3:
+    <<: *kafka-base
+    container_name: zdt-kafka-3
+    environment:
+      <<: *kafka-base-env
+      KAFKA_NODE_ID: 3
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-3:9092,INTERNAL://kafka-3:29092"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes:
+      - kafka-3-data:/var/lib/kafka/data
+
+  # Provision pipeline topics with RF=3, partitions=6, retention=7d.
+  # Runs once at boot and exits — auto-creation is OFF in prod.
+  kafka-topic-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: zdt-kafka-topic-init
+    depends_on:
+      kafka-1: { condition: service_healthy }
+      kafka-2: { condition: service_healthy }
+      kafka-3: { condition: service_healthy }
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      set -e
+      BS=kafka-1:9092,kafka-2:9092,kafka-3:9092
+      for t in cdc.users cdc.orders cdc.order_items \
+               transformed.users transformed.orders transformed.order_items \
+               dlq.source dlq.sink \
+               connect-configs connect-offsets connect-status; do
+        kafka-topics --bootstrap-server $$BS --create --if-not-exists \
+          --topic $$t \
+          --partitions 6 \
+          --replication-factor 3 \
+          --config min.insync.replicas=2 \
+          --config retention.ms=604800000
+      done
+      echo 'topic provisioning complete'
+      "
+
+  # ---------------------------------------------------------------------------
+  # MongoDB replica set — 3 voting members, writeConcern=majority enforced
+  # by the sink at write time.
+  # ---------------------------------------------------------------------------
+  mongo-1:
+    image: mongo:7
+    container_name: zdt-mongo-1
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    volumes:
+      - mongo-1-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  mongo-2:
+    image: mongo:7
+    container_name: zdt-mongo-2
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    volumes:
+      - mongo-2-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  mongo-3:
+    image: mongo:7
+    container_name: zdt-mongo-3
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    volumes:
+      - mongo-3-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  mongo-rs-init:
+    image: mongo:7
+    container_name: zdt-mongo-rs-init
+    depends_on:
+      mongo-1: { condition: service_healthy }
+      mongo-2: { condition: service_healthy }
+      mongo-3: { condition: service_healthy }
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      mongosh --host mongo-1:27017 --eval '
+        rs.initiate({
+          _id: \"rs0\",
+          members: [
+            { _id: 0, host: \"mongo-1:27017\", priority: 2 },
+            { _id: 1, host: \"mongo-2:27017\", priority: 1 },
+            { _id: 2, host: \"mongo-3:27017\", priority: 1 }
+          ]
+        });
+      ' &&
+      echo 'replica set initiated'
+      "
+
+  # ---------------------------------------------------------------------------
+  # Postgres source — production knobs.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: zdt-postgres
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_wal_size=4GB"
+      - "-c"
+      - "archive_mode=on"
+      - "-c"
+      - "archive_command=test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f"
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: app
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-archive:/var/lib/postgresql/archive
+      - ./schema/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # ---------------------------------------------------------------------------
+  # Pipeline workers — 3 replicas of each.
+  # No loadgen here. Loadgen is dev/test only.
+  # ---------------------------------------------------------------------------
+  # Replicas via `deploy.replicas` are honored by `docker stack deploy`
+  # (Swarm mode). Plain `docker compose up` will run a single replica per
+  # service. For the production target this compose models, deploy via the
+  # Helm chart (deploy/helm/pg2mongo-cdc/) on Kubernetes — that is the
+  # supported path. This compose is the topology spec, not the deployer.
+  connect:
+    build:
+      context: ./connectors/connect-image
+    depends_on:
+      kafka-topic-init: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+    environment:
+      BOOTSTRAP_SERVERS: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+      GROUP_ID: "zdt-connect"
+      CONFIG_STORAGE_TOPIC: "connect-configs"
+      OFFSET_STORAGE_TOPIC: "connect-offsets"
+      STATUS_STORAGE_TOPIC: "connect-status"
+      CONFIG_STORAGE_REPLICATION_FACTOR: 3
+      OFFSET_STORAGE_REPLICATION_FACTOR: 3
+      STATUS_STORAGE_REPLICATION_FACTOR: 3
+    deploy:
+      replicas: 2
+
+  transformer:
+    build:
+      context: ./services/transformer
+    depends_on:
+      kafka-topic-init: { condition: service_completed_successfully }
+    environment:
+      KAFKA_BROKERS: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+      KAFKA_GROUP_ID: "zdt-transformer"
+      KAFKA_TOPIC_REGEX: "^cdc\\..*"
+      RULES_DIR: "/etc/transformer/rules"
+      METRICS_ADDR: ":8080"
+    volumes:
+      - ./schema/transforms:/etc/transformer/rules:ro
+    deploy:
+      replicas: 3
+
+  sink:
+    build:
+      context: ./services/sink
+    depends_on:
+      kafka-topic-init: { condition: service_completed_successfully }
+      mongo-rs-init: { condition: service_completed_successfully }
+    environment:
+      KAFKA_BROKERS: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+      KAFKA_GROUP_ID: "zdt-sink"
+      KAFKA_TOPIC_REGEX: "^transformed\\..*"
+      MONGO_URI: "mongodb://mongo-1:27017,mongo-2:27017,mongo-3:27017/?replicaSet=rs0&readConcernLevel=majority&w=majority"
+      MONGO_DB: "migration"
+      SCHEMA_VERSION: "1"
+      METRICS_ADDR: ":8080"
+    deploy:
+      replicas: 3
+
+volumes:
+  kafka-1-data: {}
+  kafka-2-data: {}
+  kafka-3-data: {}
+  mongo-1-data: {}
+  mongo-2-data: {}
+  mongo-3-data: {}
+  postgres-data: {}
+  postgres-archive: {}

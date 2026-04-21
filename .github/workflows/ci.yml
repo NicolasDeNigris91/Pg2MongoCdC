@@ -184,6 +184,19 @@ jobs:
           docker compose -f docker-compose.yml config --quiet
           docker compose -f docker-compose.yml -f docker-compose.chaos.yml config --quiet
           docker compose -f docker-compose.yml -f docker-compose.chaos.yml -f docker-compose.toxiproxy.yml config --quiet
+          POSTGRES_PASSWORD=ci docker compose -f docker-compose.prod.yml config --quiet
+
+      - name: helm — lint and template the chart
+        run: |
+          curl -fsSL https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz | tar -xz
+          ./linux-amd64/helm lint deploy/helm/pg2mongo-cdc
+          ./linux-amd64/helm template ci-test deploy/helm/pg2mongo-cdc \
+            --namespace pg2mongo-cdc \
+            > /tmp/rendered.yaml
+          # Sanity: rendered output is non-empty and parses as YAML.
+          test -s /tmp/rendered.yaml
+          docker run --rm -v /tmp:/work mikefarah/yq:latest \
+            'true' /work/rendered.yaml > /dev/null
 
       - name: "chaos scripts — every scenario carries a PASS criterion"
         run: |

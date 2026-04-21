@@ -7,13 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(Nothing yet — file open for the next change.)
+
+---
+
+## [1.0.0] — 2026-04-21
+
+First production-shaped release.
+
 ### Added
 - `LICENSE` (MIT).
 - `SECURITY.md` with vulnerability disclosure process and response timelines.
-- `CHANGELOG.md` (this file).
-- `golangci-lint` configuration and CI step.
-- Container image scan (trivy) in CI for all service Dockerfiles.
-- Go source security scan (gosec) in CI.
+- `CHANGELOG.md` (this file, Keep a Changelog 1.1.0 format).
+- `golangci-lint` v2 configuration with production-oriented linter set
+  (errcheck, errorlint, bodyclose, noctx, staticcheck family, govet shadow,
+  ineffassign, unused, unconvert, unparam, misspell, gocritic, revive).
+  CI job runs lint against all three Go services on every push.
+- Container image security scan (trivy) in CI for all service Dockerfiles
+  (HIGH+CRITICAL severity, fail the build).
+- Go source security scan (gosec) in CI for all three services.
+- Operator handbook documentation:
+  - [`docs/deployment.md`](./docs/deployment.md) — Kubernetes deployment guide.
+  - [`docs/operations.md`](./docs/operations.md) — Day-to-day operations.
+  - [`docs/security.md`](./docs/security.md) — Threat model + secrets management.
+  - [`docs/slo.md`](./docs/slo.md) — SLI/SLO definitions and error budgets.
+- **Helm chart** at [`deploy/helm/pg2mongo-cdc/`](./deploy/helm/pg2mongo-cdc/)
+  for production Kubernetes deployment. Includes Deployments + Services for
+  Connect, transformer, sink; HPAs keyed on consumer-group lag; NetworkPolicies
+  with deny-all + explicit-allow per workload; PodMonitor for prometheus-operator;
+  anti-affinity preferring spread across nodes; non-root, read-only-root-fs
+  pod security context; ServiceAccount with no auto-mount of API token.
+- **`docker-compose.prod.yml`** declaring the production-shape data-plane
+  topology (3-broker Kafka RF=3 ISR=2, 3-node Mongo replica set, Postgres
+  with `wal_level=logical` and WAL archive). Reference, not a laptop deployer.
 
 ### Fixed
 - `chaos/run-all.sh` now iterates scenario paths via `mapfile` array expansion,
@@ -32,7 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   end-to-end against a clean stack.
 
 ### Investigation Notes
-
 - Earlier exploratory runs reported a small, persistent drift
   (~300 docs Mongo > Postgres) after consecutive scenario 01 runs.
   After landing the auto-topic-creation fix above, four consecutive
@@ -44,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.0] — Pre-release (pending bug closure)
+## [1.0.0-pre] — pre-release walking skeleton (2026-04-20)
 
 Initial shipping milestone: a Postgres→MongoDB CDC pipeline with
 idempotent LSN-gated sink, YAML-driven schema transformation, a 5-scenario

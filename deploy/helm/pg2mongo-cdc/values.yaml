@@ -1,0 +1,215 @@
+# Default values for pg2mongo-cdc.
+# Production overrides should be supplied via -f values.production.yaml,
+# never by editing this file in-place.
+#
+# This chart deploys ONLY the pipeline workers (Connect, transformer, sink).
+# The data plane (Postgres, Kafka, Schema Registry, MongoDB) is assumed to
+# exist externally — see docs/deployment.md in the source repo.
+
+# -----------------------------------------------------------------------------
+# Container images. Pinned tags only — never use :latest in production.
+# -----------------------------------------------------------------------------
+image:
+  registry: ghcr.io/nicolasdenigris91
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  # Per-service tags — defaulted to the chart appVersion. Override individually
+  # for canary or partial rollouts.
+  transformerRepository: pg2mongo-cdc-transformer
+  sinkRepository: pg2mongo-cdc-sink
+  connectRepository: pg2mongo-cdc-connect
+  # If set, all three services use this tag. Otherwise each falls back to
+  # .Chart.AppVersion.
+  tag: ""
+
+# -----------------------------------------------------------------------------
+# External data plane wiring. NONE of these are provisioned by this chart.
+# -----------------------------------------------------------------------------
+postgres:
+  # Hostname or service name reachable from the cluster.
+  host: postgres.your-domain.local
+  port: 5432
+  database: app
+  publication: zdt_publication
+  slot: zdt_slot
+  # Secret containing keys: username, password
+  credentialsSecret: postgres-credentials
+
+kafka:
+  # Comma-separated bootstrap broker list.
+  bootstrapServers: kafka-bootstrap.your-domain.local:9092
+  # Secret containing keys: username, password (SASL/SCRAM-SHA-512)
+  credentialsSecret: kafka-credentials
+  # Required for Avro envelope evolution (ADR-006). Set to false to use
+  # JsonConverter — simpler, no schema evolution guarantees.
+  schemaRegistry:
+    enabled: true
+    url: https://schema-registry.your-domain.local
+    credentialsSecret: schema-registry-credentials
+
+mongo:
+  # Secret containing key: uri  (e.g. mongodb+srv://user:pass@cluster/?retryWrites=true&w=majority)
+  uriSecret: mongo-uri
+  database: migration
+  schemaVersion: 1
+
+# -----------------------------------------------------------------------------
+# Transformer (cdc.* -> transformed.*). Stateless, scales by partition count.
+# -----------------------------------------------------------------------------
+transformer:
+  enabled: true
+  replicaCount: 3
+  topicRegex: "^cdc\\..*"
+  groupId: zdt-transformer
+  rulesConfigMap: pg2mongo-cdc-transform-rules
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  # Horizontal Pod Autoscaler. Bounded by the partition count of cdc.* topics —
+  # adding replicas beyond that adds idle consumers, not throughput.
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    metrics:
+      # Custom metric: consumer group lag from Prometheus Adapter.
+      # Configure your prometheus-adapter to expose
+      # kafka_consumergroup_lag{consumergroup="zdt-transformer"}.
+      - type: Pods
+        pods:
+          metric:
+            name: kafka_consumergroup_lag_per_pod
+            selector:
+              matchLabels:
+                consumergroup: zdt-transformer
+          target:
+            type: AverageValue
+            averageValue: "1000"
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -----------------------------------------------------------------------------
+# Sink (transformed.* -> MongoDB). Stateless, LSN-gated, idempotent.
+# -----------------------------------------------------------------------------
+sink:
+  enabled: true
+  replicaCount: 3
+  topicRegex: "^transformed\\..*"
+  groupId: zdt-sink
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    metrics:
+      - type: Pods
+        pods:
+          metric:
+            name: kafka_consumergroup_lag_per_pod
+            selector:
+              matchLabels:
+                consumergroup: zdt-sink
+          target:
+            type: AverageValue
+            averageValue: "1000"
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -----------------------------------------------------------------------------
+# Kafka Connect (Debezium PostgreSQL source). Distributed mode, 2+ workers
+# share state via the connect-* internal Kafka topics.
+# -----------------------------------------------------------------------------
+connect:
+  enabled: true
+  replicaCount: 2
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+  # Internal Kafka topics for distributed-mode coordination.
+  configStorageTopic: connect-configs
+  offsetStorageTopic: connect-offsets
+  statusStorageTopic: connect-status
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -----------------------------------------------------------------------------
+# ServiceAccount for all three workloads. RBAC is intentionally minimal —
+# the pipeline does not call the Kubernetes API at runtime.
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# -----------------------------------------------------------------------------
+# Pod-level security context. Locked down to the production-baseline values
+# used by the Restricted Pod Security Standard.
+# -----------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+  runAsNonRoot: true
+
+# -----------------------------------------------------------------------------
+# Network policy: deny-all by default, then explicitly allow the egress paths
+# this pipeline needs. See docs/security.md for the rationale.
+# -----------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  # If set, restrict ingress on the metrics endpoint to pods carrying these
+  # labels (e.g. your Prometheus operator pods).
+  metricsAllowFromPodLabels:
+    app.kubernetes.io/name: prometheus
+
+# -----------------------------------------------------------------------------
+# Prometheus PodMonitor. Requires prometheus-operator in the cluster. Disable
+# this and scrape via your existing job if you don't run the operator.
+# -----------------------------------------------------------------------------
+podMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  # Drop the noisiest go_* internals if your Prometheus is constrained.
+  metricRelabelings: []

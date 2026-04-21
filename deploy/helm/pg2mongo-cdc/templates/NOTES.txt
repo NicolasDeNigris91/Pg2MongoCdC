@@ -1,0 +1,55 @@
+Thank you for installing {{ .Chart.Name }} v{{ .Chart.AppVersion }}.
+
+Components deployed in namespace "{{ .Release.Namespace }}":
+{{- if .Values.connect.enabled }}
+  * Kafka Connect ({{ .Values.connect.replicaCount }} workers)
+{{- end }}
+{{- if .Values.transformer.enabled }}
+  * Transformer ({{ .Values.transformer.replicaCount }} replicas, HPA: {{ .Values.transformer.hpa.enabled }})
+{{- end }}
+{{- if .Values.sink.enabled }}
+  * Sink ({{ .Values.sink.replicaCount }} replicas, HPA: {{ .Values.sink.hpa.enabled }})
+{{- end }}
+
+Next steps:
+
+1. Verify all pods are Ready:
+
+   kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+{{- if .Values.connect.enabled }}
+
+2. Register the Debezium PostgreSQL connector. Port-forward to the Connect
+   REST API and POST the connector config:
+
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "pg2mongo-cdc.fullname" . }}-connect 8083:8083 &
+
+   curl -X POST -H 'Content-Type: application/json' \
+     -d @connectors/debezium-postgres.json \
+     http://localhost:8083/connectors
+
+   curl -fsS http://localhost:8083/connectors?expand=status \
+     | jq '.[] | {name: .status.name, state: .status.connector.state, tasks: [.status.tasks[].state]}'
+
+3. Smoke test by inserting a row in Postgres and confirming it appears in
+   MongoDB within 5 seconds. See docs/deployment.md "Smoke test".
+
+4. Wire up the Prometheus alerts from observability/prometheus/alerts.yml.
+   Each alert maps to a section in docs/runbook.md.
+
+5. Verify the SLOs (docs/slo.md) on the Grafana dashboard
+   "Migration Overview".
+{{- else }}
+
+2. Connect was disabled in this release. The pipeline workers are deployed
+   but no CDC source is configured. Either:
+   - Enable connect (set connect.enabled=true and helm upgrade), or
+   - Bring your own Connect cluster and point cdc.* topics at the same
+     Kafka bootstrap servers.
+{{- end }}
+
+For day-to-day operations: docs/operations.md
+For incident response: docs/runbook.md
+For threat model and secrets: docs/security.md
+For SLI/SLO definitions: docs/slo.md
+For postmortems and chaos findings: docs/chaos-findings.md
