@@ -70,7 +70,7 @@
 ## Repository Layout
 
 ```
-zero-downtime-migration/
+pg2mongo-cdc/
 ├── README.md                          ← recruiter-facing, "Why" over "What"
 ├── CLAUDE.md                          ← AI agent context (conventions, invariants)
 ├── docker-compose.yml                 ← full stack: pg, kafka, connect, transformer, sink, mongo, prom, grafana, toxiproxy, k6
@@ -339,7 +339,7 @@ writes during cutover. The only correct answer is CDC — and getting CDC right
 requires solving five sub-problems that most tutorials skip.
 
 ## See It Run (60 seconds)
-    git clone ... && cd zero-downtime-migration
+    git clone ... && cd pg2mongo-cdc
     make demo      # boots the full stack
     make load      # 5k writes/sec against Postgres
     # open localhost:3000 for Grafana
