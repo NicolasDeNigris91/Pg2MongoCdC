@@ -49,6 +49,9 @@ func Load(dir string) (*Mapper, error) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
+		// #nosec G304 -- dir is an operator-provided config root (RULES_DIR
+		// env var), e.Name() comes from os.ReadDir(dir) of that same root
+		// and is filtered to *.yml. No user input reaches this path.
 		b, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("mapper.Load: %s: %w", path, err)
