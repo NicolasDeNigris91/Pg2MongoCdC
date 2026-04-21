@@ -22,10 +22,14 @@ type Store interface {
 // ErrNoRows signals "zero rows affected" — handlers translate to 404.
 var ErrNoRows = errors.New("api: no rows")
 
+// Handler owns the /users and /healthz routes. The Store dependency is
+// injected so tests can substitute an in-memory fake (see api_test.go).
 type Handler struct {
 	Store Store
 }
 
+// Register mounts the handler's routes onto mux. Designed to be called
+// once at process startup; safe to re-mount onto a fresh mux in tests.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /users", h.insert)
 	mux.HandleFunc("PATCH /users/random", h.updateRandom)
@@ -117,6 +121,8 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		fmt.Fprintln(w, err)
+		// Best-effort fallback when the client hung up mid-write.
+		// If this Fprintln also fails, there is nothing useful to do.
+		_, _ = fmt.Fprintln(w, err)
 	}
 }

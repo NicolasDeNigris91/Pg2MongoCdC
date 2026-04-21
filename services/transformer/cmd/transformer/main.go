@@ -57,7 +57,9 @@ func main() {
 		kgo.ProducerBatchMaxBytes(16*1024*1024),
 	)
 	if err != nil {
-		log.Fatalf("kgo.NewClient: %v", err)
+		// Boot-time fatal. Process exit lets the OS reclaim the signal
+		// notification channel; there is no useful cleanup to run yet.
+		log.Fatalf("kgo.NewClient: %v", err) //nolint:gocritic
 	}
 	defer client.Close()
 
@@ -71,10 +73,7 @@ func main() {
 		}
 	}()
 
-	for {
-		if rootCtx.Err() != nil {
-			break
-		}
+	for rootCtx.Err() == nil {
 		if err := runOnce(rootCtx, client, m); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				break

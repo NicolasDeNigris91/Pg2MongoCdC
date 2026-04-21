@@ -29,7 +29,9 @@ func main() {
 
 	store, err := db.New(ctx, uri)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		// Boot-time fatal. Process exit lets the OS reclaim the signal
+		// channel; there is no useful cleanup at this point in startup.
+		log.Fatalf("db: %v", err) //nolint:gocritic
 	}
 	defer store.Close()
 

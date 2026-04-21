@@ -14,6 +14,10 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// FranzConsumer adapts a franz-go kgo.Client to the consumer.KafkaConsumer
+// interface used by the consume loop. It is intentionally thin — the
+// interesting semantics (batching, commit-after-side-effect) live in the
+// consumer package, not here.
 type FranzConsumer struct {
 	client *kgo.Client
 }
@@ -44,6 +48,8 @@ func New(brokers []string, groupID, topicRegex string) (*FranzConsumer, error) {
 	return &FranzConsumer{client: client}, nil
 }
 
+// Close tears down the underlying kgo.Client. Safe to call once at
+// shutdown; blocks until in-flight produce acks and fetch sessions drain.
 func (f *FranzConsumer) Close() {
 	f.client.Close()
 }
@@ -58,7 +64,7 @@ func (f *FranzConsumer) Poll(ctx context.Context) ([]consumer.Record, error) {
 		return nil, ctx.Err()
 	}
 	if errs := fetches.Errors(); len(errs) > 0 {
-		return nil, fmt.Errorf("kafka.Poll: %v", errs[0].Err)
+		return nil, fmt.Errorf("kafka.Poll: %w", errs[0].Err)
 	}
 	var out []consumer.Record
 	fetches.EachRecord(func(r *kgo.Record) {
@@ -74,16 +80,24 @@ func (f *FranzConsumer) Poll(ctx context.Context) ([]consumer.Record, error) {
 	return out, nil
 }
 
+// MarkCommit flags a record as ready to commit once CommitMarked runs.
+// Uses franz-go's MarkCommitRecords path — it wires through the same
+// group-session epoch tracking that CommitMarkedOffsets expects. An
+// earlier attempt with MarkCommitOffsets(Epoch:-1) silently failed to
+// commit (kafka-consumer-groups reported CURRENT-OFFSET=- forever).
+//
+//nolint:gocritic // consumer.Record passes by value to match the
+// KafkaConsumer interface; changing to a pointer would leak a
+// driver-specific lifetime concern into the consume loop.
 func (f *FranzConsumer) MarkCommit(r consumer.Record) {
-	// Use franz-go's documented MarkCommitRecords path — it wires through the
-	// same group-session epoch tracking that CommitMarkedOffsets expects.
-	// Our previous attempt with MarkCommitOffsets(Epoch:-1) silently failed
-	// to commit (kafka-consumer-groups reported CURRENT-OFFSET=- forever).
 	if raw, ok := r.Raw.(*kgo.Record); ok && raw != nil {
 		f.client.MarkCommitRecords(raw)
 	}
 }
 
+// CommitMarked flushes the set of offsets marked via MarkCommit to the
+// Kafka group coordinator. Called by the consume loop only after the
+// downstream write succeeded (ADR-003 commit-after-side-effect).
 func (f *FranzConsumer) CommitMarked(ctx context.Context) error {
 	if err := f.client.CommitMarkedOffsets(ctx); err != nil {
 		return fmt.Errorf("kafka.CommitMarked: %w", err)

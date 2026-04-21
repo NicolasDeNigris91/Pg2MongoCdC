@@ -11,10 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Store is the Postgres-backed implementation of the api.Store interface.
+// A *pgxpool.Pool is safe for concurrent use by multiple goroutines, which
+// matches the usage from the HTTP handlers at k6's target RPS.
 type Store struct {
 	Pool *pgxpool.Pool
 }
 
+// New opens a pgxpool against uri and pings to fail fast on bad configs.
+// The returned Store must be Close()'d at process shutdown.
 func New(ctx context.Context, uri string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, uri)
 	if err != nil {
@@ -26,10 +31,15 @@ func New(ctx context.Context, uri string) (*Store, error) {
 	return &Store{Pool: pool}, nil
 }
 
+// Close releases the pool's connections. Safe to call multiple times.
 func (s *Store) Close() {
 	s.Pool.Close()
 }
 
+// InsertUser performs an ON CONFLICT upsert keyed on email. A repeat
+// insert with the same email turns into an UPDATE (full_name + updated_at),
+// which is the natural behaviour under k6's write-mix where a VU may
+// replay the same email between restarts.
 func (s *Store) InsertUser(ctx context.Context, email, fullName string, profile map[string]any) (int64, error) {
 	profileJSON, err := json.Marshal(profile)
 	if err != nil {
@@ -49,8 +59,10 @@ func (s *Store) InsertUser(ctx context.Context, email, fullName string, profile 
 	return id, nil
 }
 
-// Pick a random row via TABLESAMPLE SYSTEM — orders-of-magnitude faster than
-// ORDER BY random() on large tables. Falls back to nothing when empty.
+// UpdateRandomUser picks a row via TABLESAMPLE SYSTEM — orders-of-magnitude
+// faster than `ORDER BY random()` on large tables. Falls back to `ORDER BY id
+// LIMIT 1` when the sample returns nothing, which is common on small tables.
+// Returns 0 when the table is empty (handler translates to 204).
 func (s *Store) UpdateRandomUser(ctx context.Context, newFullName string) (int64, error) {
 	var id int64
 	err := s.Pool.QueryRow(ctx,
@@ -81,6 +93,9 @@ func (s *Store) UpdateRandomUser(ctx context.Context, newFullName string) (int64
 	return id, nil
 }
 
+// DeleteRandomUser removes the lowest-id row — deterministic ordering lets
+// the chaos scripts reason about which rows are deleted first. Returns 0
+// when the table is empty (handler translates to 204).
 func (s *Store) DeleteRandomUser(ctx context.Context) (int64, error) {
 	var id int64
 	err := s.Pool.QueryRow(ctx,

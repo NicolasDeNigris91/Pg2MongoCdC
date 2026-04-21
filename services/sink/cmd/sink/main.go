@@ -53,7 +53,10 @@ func main() {
 	// Mongo
 	mClient, err := mongo.Connect(options.Client().ApplyURI(mongoURI))
 	if err != nil {
-		log.Fatalf("mongo connect: %v", err)
+		// Boot-time fatal. Process exit lets the OS reclaim the signal
+		// notification channel and anything else deferred; there is no
+		// useful cleanup to run at this point in startup.
+		log.Fatalf("mongo connect: %v", err) //nolint:gocritic
 	}
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -70,8 +73,8 @@ func main() {
 		Handler:           buildHTTPMux(m),
 	}
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("metrics server: %v", err)
+		if serr := srv.ListenAndServe(); serr != nil && !errors.Is(serr, http.ErrServerClosed) {
+			log.Printf("metrics server: %v", serr)
 		}
 	}()
 	defer func() {

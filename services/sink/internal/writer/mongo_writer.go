@@ -70,21 +70,6 @@ func (m *MongoWriter) ApplyBatch(ctx context.Context, evs []CDCEvent) error {
 	return nil
 }
 
-// isDuplicateKey returns true iff err is a BulkWriteException containing at
-// least one duplicate-key error (Mongo code 11000). Used by the single-record
-// Apply path for backward compatibility.
-func isDuplicateKey(err error) bool {
-	var bwe mongo.BulkWriteException
-	if errors.As(err, &bwe) {
-		for _, we := range bwe.WriteErrors {
-			if we.Code == 11000 {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // allDuplicateKey returns true iff every individual error in a bulk failure
 // is E11000. If any non-11000 error is present, the batch is not purely an
 // idempotent-skip situation and the caller must retry.

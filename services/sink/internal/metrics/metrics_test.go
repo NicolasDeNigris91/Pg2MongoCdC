@@ -1,6 +1,7 @@
 package metrics_test
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -42,7 +43,7 @@ func TestMetrics_HTTPHandlerServesRegisteredMetrics(t *testing.T) {
 	m.WriteErrors.WithLabelValues("mongo", "network").Add(1)
 	m.ReplicationLag.WithLabelValues("users").Observe(1.2)
 
-	req := httptest.NewRequest("GET", "/metrics", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil)
 	rec := httptest.NewRecorder()
 	m.HTTPHandler().ServeHTTP(rec, req)
 

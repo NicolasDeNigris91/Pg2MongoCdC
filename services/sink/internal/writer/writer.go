@@ -14,6 +14,8 @@ import "fmt"
 // CDCOp is the operation carried by a Debezium event (see the envelope `op` field).
 type CDCOp string
 
+// Debezium envelope op values. Kept as string-typed constants so the
+// decoder can compare directly against the wire token without allocating.
 const (
 	OpInsert CDCOp = "c" // create
 	OpUpdate CDCOp = "u"

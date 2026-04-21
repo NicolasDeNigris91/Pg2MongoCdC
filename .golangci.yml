@@ -1,0 +1,73 @@
+# golangci-lint configuration (v2 format)
+#
+# Philosophy:
+#   - Default to the "staticcheck" family because it catches real bugs,
+#     not style preferences.
+#   - errcheck + errorlint because unchecked or unwrapped errors in CDC
+#     code paths is where silent data loss comes from.
+#   - bodyclose + noctx because the sink and transformer speak HTTP to
+#     Mongo and Kafka — resource leaks on the hot path are production
+#     incidents, not style quibbles.
+#   - Disable purely stylistic linters — too noisy relative to value.
+#
+# Run locally:
+#   docker run --rm -v "$PWD:/app" -w /app/services/sink \
+#     golangci/golangci-lint:latest-alpine golangci-lint run --config=/app/.golangci.yml
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - bodyclose
+    - noctx
+    - errorlint
+    - gocritic
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    errcheck:
+      # Ignore deferred Close() — best-effort at teardown, nothing
+      # useful to do if it fails.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.Tx).Rollback
+        - (*database/sql.DB).Close
+    govet:
+      enable:
+        - shadow
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        # Too noisy on intentional small branches.
+        - ifElseChain
+  exclusions:
+    rules:
+      # Test files are deliberately simpler: httptest.NewRequest without
+      # context, string literals repeated for readability, assertions
+      # that ignore error returns. Apply production rigor to production
+      # code; keep tests legible.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unparam
+          - gocritic
+          - noctx
+          - revive
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

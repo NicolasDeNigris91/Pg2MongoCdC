@@ -20,7 +20,7 @@ type fakeConsumer struct {
 	committedAfter []int64 // snapshot of markedOffsets at each CommitMarked
 }
 
-func (f *fakeConsumer) Poll(ctx context.Context) ([]consumer.Record, error) {
+func (f *fakeConsumer) Poll(_ context.Context) ([]consumer.Record, error) {
 	out := f.records
 	f.records = nil
 	return out, nil
@@ -30,7 +30,7 @@ func (f *fakeConsumer) MarkCommit(r consumer.Record) {
 	f.markedOffsets = append(f.markedOffsets, r.Offset)
 }
 
-func (f *fakeConsumer) CommitMarked(ctx context.Context) error {
+func (f *fakeConsumer) CommitMarked(_ context.Context) error {
 	f.commitCalls++
 	f.committedAfter = append(f.committedAfter, slices.Clone(f.markedOffsets)...)
 	return nil

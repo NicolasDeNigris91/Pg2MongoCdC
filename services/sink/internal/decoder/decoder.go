@@ -44,6 +44,11 @@ type valueEnvelope struct {
 	} `json:"payload"`
 }
 
+// Decode parses one Debezium JSON envelope record into a normalized
+// CDCEvent. A nil-value record is treated as a Kafka tombstone and
+// returns ErrTombstone so the caller can skip it without error noise.
+// Any malformed envelope is a hard error — the decoder never silently
+// substitutes defaults for missing fields.
 func Decode(key, value []byte) (writer.CDCEvent, error) {
 	if len(value) == 0 || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		return writer.CDCEvent{}, ErrTombstone
