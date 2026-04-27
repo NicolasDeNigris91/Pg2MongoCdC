@@ -2,8 +2,8 @@ apiVersion: v2
 name: pg2mongo-cdc
 description: |
   Idempotent Postgres → MongoDB CDC pipeline (Debezium + Kafka + Go services).
-  Deploys the three pipeline components — Kafka Connect with the Debezium
-  PostgreSQL connector, the Go transformer, and the Go LSN-gated sink — as
+  Deploys the three pipeline components - Kafka Connect with the Debezium
+  PostgreSQL connector, the Go transformer, and the Go LSN-gated sink - as
   distinct Deployments with Horizontal Pod Autoscalers keyed on per-service
   consumer group lag.
 

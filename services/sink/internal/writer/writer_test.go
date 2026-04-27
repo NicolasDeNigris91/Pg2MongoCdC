@@ -74,7 +74,7 @@ func TestBuildWriteOp_InsertProducesLSNGatedUpsert(t *testing.T) {
 
 // Cycle 2: DELETE emits an LSN-gated DeleteOne. The filter uses $lt only
 // (no $exists:false branch) because deleting a row that was never present
-// is a no-op by construction — no need to match the absent-LSN case.
+// is a no-op by construction - no need to match the absent-LSN case.
 // This prevents a replayed DELETE from removing a row that was subsequently
 // re-inserted under a higher LSN.
 func TestBuildWriteOp_DeleteProducesLSNGatedDelete(t *testing.T) {
@@ -115,7 +115,7 @@ func TestBuildWriteOp_DeleteProducesLSNGatedDelete(t *testing.T) {
 	}
 }
 
-// Cycle 3: nil After on a non-delete op is a correctness bug — an upsert
+// Cycle 3: nil After on a non-delete op is a correctness bug - an upsert
 // with an empty $set would insert a document containing only sourceLsn and
 // schemaVersion on first write, losing all real fields. We reject at the
 // boundary rather than silently produce a malformed write.

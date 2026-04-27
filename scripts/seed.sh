@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Insert a small burst of rows into Postgres and verify they land in Mongo.
-# Equivalent of `make seed` — works without make.
+# Equivalent of `make seed` - works without make.
 set -euo pipefail
 
 N="${N:-25}"

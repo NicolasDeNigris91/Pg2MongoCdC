@@ -21,7 +21,7 @@ import (
 )
 
 // ErrTombstone is returned when Decode sees a Kafka tombstone (value=nil).
-// Callers should skip tombstones — the preceding "d" event is the real op.
+// Callers should skip tombstones - the preceding "d" event is the real op.
 var ErrTombstone = errors.New("decoder: tombstone event, skip")
 
 type keyEnvelope struct {
@@ -47,7 +47,7 @@ type valueEnvelope struct {
 // Decode parses one Debezium JSON envelope record into a normalized
 // CDCEvent. A nil-value record is treated as a Kafka tombstone and
 // returns ErrTombstone so the caller can skip it without error noise.
-// Any malformed envelope is a hard error — the decoder never silently
+// Any malformed envelope is a hard error - the decoder never silently
 // substitutes defaults for missing fields.
 func Decode(key, value []byte) (writer.CDCEvent, error) {
 	if len(value) == 0 || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {

@@ -41,7 +41,7 @@ db.<collection>.deleteOne({ _id: "<table>:<pk>", sourceLsn: { $lt: event.lsn } }
 
 ## Why
 
-1. **2PC across heterogeneous sinks does not compose.** Kafka transactions are transactional only across Kafka topics. A Mongo write is not part of the Kafka transaction. Papering over this gap with a transactional outbox simply relocates the idempotency problem to a new table — you have not eliminated the need for idempotent writes, you have just added a layer.
+1. **2PC across heterogeneous sinks does not compose.** Kafka transactions are transactional only across Kafka topics. A Mongo write is not part of the Kafka transaction. Papering over this gap with a transactional outbox simply relocates the idempotency problem to a new table - you have not eliminated the need for idempotent writes, you have just added a layer.
 
 2. **Single-document atomicity is sufficient.** Our per-event write touches exactly one document (one row → one document, including embedded sub-documents per the transform rules). MongoDB guarantees atomicity on a single document. We do not need multi-document transactions, which would 5× the write latency.
 
@@ -49,9 +49,9 @@ db.<collection>.deleteOne({ _id: "<table>:<pk>", sourceLsn: { $lt: event.lsn } }
 
 4. **The `$exists: false` branch handles first-write.** On the initial INSERT for a row there is no `sourceLsn` yet. Without the `$or`, the filter would reject the first write.
 
-## Implementation note — E11000 on upsert is a feature
+## Implementation note - E11000 on upsert is a feature
 
-The filter `{_id, $or: [$lt, $exists:false]}` only *matches* docs that are older than the incoming event. When the stored doc has `sourceLsn >= event.lsn` (same-LSN replay or stale replay), the filter matches nothing. With `upsert=true`, Mongo then tries to INSERT a new document with `_id = "<table>:<pk>"` — and the unique `_id` index rejects it with error code **11000** (duplicate key).
+The filter `{_id, $or: [$lt, $exists:false]}` only *matches* docs that are older than the incoming event. When the stored doc has `sourceLsn >= event.lsn` (same-LSN replay or stale replay), the filter matches nothing. With `upsert=true`, Mongo then tries to INSERT a new document with `_id = "<table>:<pk>"` - and the unique `_id` index rejects it with error code **11000** (duplicate key).
 
 This is the correct behavior. Semantically: "the doc already reflects state at or newer than this event; the event is redundant." The sink treats E11000 from a BulkWrite as a successful idempotent no-op and moves on.
 
@@ -71,7 +71,7 @@ The integration test in `services/sink/internal/writer/mongo_writer_integration_
 ## Trade-offs we accept
 
 - **Every write costs one extra field.** `sourceLsn` and `schemaVersion` are metadata overhead on every doc. Negligible compared to domain fields.
-- **No cross-document atomicity.** If we needed "update user AND insert audit log atomically" we would be stuck. We do not need it — audit logs are handled downstream of Mongo by a separate pipeline.
+- **No cross-document atomicity.** If we needed "update user AND insert audit log atomically" we would be stuck. We do not need it - audit logs are handled downstream of Mongo by a separate pipeline.
 - **An observable `migration_idempotent_skip_total` counter.** We monitor this as a metric rather than an error. A sustained non-zero rate during normal operation indicates a misconfigured consumer group or an unexpected replay.
 
 ## Verification
@@ -81,6 +81,6 @@ The integration test in `services/sink/internal/writer/mongo_writer_integration_
 
 ## Alternatives considered
 
-- **Kafka transactional outbox.** Rejected — moves the idempotency problem into a new table rather than eliminating it.
-- **Content hashing.** `md5(row)` as a dedupe key. Rejected — does not handle legitimate UPDATEs (row content changes, same PK).
+- **Kafka transactional outbox.** Rejected - moves the idempotency problem into a new table rather than eliminating it.
+- **Content hashing.** `md5(row)` as a dedupe key. Rejected - does not handle legitimate UPDATEs (row content changes, same PK).
 - **Per-row version number sourced from Postgres.** Requires adding a column to every source table. Too intrusive on the system being migrated.

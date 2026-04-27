@@ -9,7 +9,7 @@
 #
 #   1. See in a single file what the production topology actually is.
 #   2. Diff it against docker-compose.yml to see exactly which knobs the
-#      dev compose relaxes (and why — see CLAUDE.md "Hard invariants").
+#      dev compose relaxes (and why - see CLAUDE.md "Hard invariants").
 #   3. Boot it on a beefy VM (>= 16 vCPU, 32 GB RAM, NVMe storage) for
 #      pre-prod validation if managed services are not yet provisioned.
 #
@@ -32,7 +32,7 @@ x-kafka-base: &kafka-base
     KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
     KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
     KAFKA_MIN_INSYNC_REPLICAS: 2
-    # Auto-create disabled in production — topics are managed by operators
+    # Auto-create disabled in production - topics are managed by operators
     # so accidental typos in client code don't silently create garbage topics.
     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 3000
@@ -45,7 +45,7 @@ x-kafka-base: &kafka-base
 
 services:
   # ---------------------------------------------------------------------------
-  # Kafka cluster — 3 brokers, RF=3, ISR>=2.
+  # Kafka cluster - 3 brokers, RF=3, ISR>=2.
   # ---------------------------------------------------------------------------
   kafka-1:
     <<: *kafka-base
@@ -81,7 +81,7 @@ services:
       - kafka-3-data:/var/lib/kafka/data
 
   # Provision pipeline topics with RF=3, partitions=6, retention=7d.
-  # Runs once at boot and exits — auto-creation is OFF in prod.
+  # Runs once at boot and exits - auto-creation is OFF in prod.
   kafka-topic-init:
     image: confluentinc/cp-kafka:7.6.1
     container_name: zdt-kafka-topic-init
@@ -109,7 +109,7 @@ services:
       "
 
   # ---------------------------------------------------------------------------
-  # MongoDB replica set — 3 voting members, writeConcern=majority enforced
+  # MongoDB replica set - 3 voting members, writeConcern=majority enforced
   # by the sink at write time.
   # ---------------------------------------------------------------------------
   mongo-1:
@@ -172,7 +172,7 @@ services:
       "
 
   # ---------------------------------------------------------------------------
-  # Postgres source — production knobs.
+  # Postgres source - production knobs.
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
@@ -206,13 +206,13 @@ services:
       retries: 6
 
   # ---------------------------------------------------------------------------
-  # Pipeline workers — 3 replicas of each.
+  # Pipeline workers - 3 replicas of each.
   # No loadgen here. Loadgen is dev/test only.
   # ---------------------------------------------------------------------------
   # Replicas via `deploy.replicas` are honored by `docker stack deploy`
   # (Swarm mode). Plain `docker compose up` will run a single replica per
   # service. For the production target this compose models, deploy via the
-  # Helm chart (deploy/helm/pg2mongo-cdc/) on Kubernetes — that is the
+  # Helm chart (deploy/helm/pg2mongo-cdc/) on Kubernetes - that is the
   # supported path. This compose is the topology spec, not the deployer.
   connect:
     build:

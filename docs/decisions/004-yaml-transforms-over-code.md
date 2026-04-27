@@ -51,9 +51,9 @@ joins:
 
 ## Alternatives considered
 
-- **Hand-written Go mappers.** Rejected — boilerplate, linearly growing test surface, new code for every new table.
-- **General-purpose transform language (Jsonnet, CUE, Jq).** Rejected — adds a runtime dependency and a learning curve for contributors, with no benefit over a narrow YAML DSL scoped to our exact problem.
-- **Schema registry transforms (SMTs) on Debezium.** Rejected — SMTs are wire-level and brittle for anything beyond field renames.
+- **Hand-written Go mappers.** Rejected - boilerplate, linearly growing test surface, new code for every new table.
+- **General-purpose transform language (Jsonnet, CUE, Jq).** Rejected - adds a runtime dependency and a learning curve for contributors, with no benefit over a narrow YAML DSL scoped to our exact problem.
+- **Schema registry transforms (SMTs) on Debezium.** Rejected - SMTs are wire-level and brittle for anything beyond field renames.
 
 ## Consequences
 

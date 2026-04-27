@@ -1,4 +1,4 @@
-# Zero-Downtime Migration — local dev stack.
+# Zero-Downtime Migration - local dev stack.
 #
 # Laptop-simplified topology (see CLAUDE.md "Hard invariants #5"):
 #   - 1 Kafka broker in KRaft mode (prod = 3 brokers, RF=3, min.insync.replicas=2)
@@ -54,7 +54,7 @@ services:
     logging: *default-logging
 
   # ------------------------------------------------------------------
-  # Kafka (KRaft, single combined node — dev only)
+  # Kafka (KRaft, single combined node - dev only)
   # ------------------------------------------------------------------
   kafka:
     image: confluentinc/cp-kafka:7.6.1
@@ -67,7 +67,7 @@ services:
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
       # PROXIED is a dedicated listener advertised as toxiproxy:19092 so that
       # clients bootstrapping via toxiproxy:19092 get metadata pointing back
-      # there — every subsequent request also flows through the proxy.
+      # there - every subsequent request also flows through the proxy.
       # Harmless when Toxiproxy is not up; clients simply never bootstrap
       # via this listener.
       KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:29092,PROXIED://0.0.0.0:39092"
@@ -149,7 +149,7 @@ services:
       CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
       CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "true"
       # Heartbeat topic so Postgres doesn't recycle WAL during low traffic
-      # (the #1 cause of silent data loss — see CLAUDE.md invariant)
+      # (the #1 cause of silent data loss - see CLAUDE.md invariant)
       REST_ADVERTISED_HOST_NAME: connect
       REST_PORT: ${CONNECT_REST_PORT:-8083}
       PLUGIN_PATH: "/kafka/connect"
@@ -166,7 +166,7 @@ services:
     logging: *default-logging
 
   # ------------------------------------------------------------------
-  # MongoDB 7 — single-node replica set (dev simplification)
+  # MongoDB 7 - single-node replica set (dev simplification)
   # ------------------------------------------------------------------
   mongo:
     image: mongo:7
@@ -218,8 +218,8 @@ services:
   # ------------------------------------------------------------------
   # Week 2: our own Go sink with commit-after-side-effect + LSN-gated
   # idempotent upserts. Replaces the off-the-shelf MongoDB Kafka
-  # Connector (which lost 1 row in chaos 01 — see docs/chaos-findings.md).
-  # Week 4: sink now consumes transformed.* instead of cdc.* — the
+  # Connector (which lost 1 row in chaos 01 - see docs/chaos-findings.md).
+  # Week 4: sink now consumes transformed.* instead of cdc.* - the
   # transformer sits between them and applies YAML rules.
   # ------------------------------------------------------------------
   sink:
@@ -251,7 +251,7 @@ services:
     logging: *default-logging
 
   # ------------------------------------------------------------------
-  # Week 3: loadgen sidecar — translates k6 HTTP into Postgres writes.
+  # Week 3: loadgen sidecar - translates k6 HTTP into Postgres writes.
   # Stateless, scales trivially via --scale loadgen=N.
   # ------------------------------------------------------------------
   loadgen:

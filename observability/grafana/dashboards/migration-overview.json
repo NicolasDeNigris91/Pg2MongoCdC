@@ -117,7 +117,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Postgres replication slot — retained WAL bytes",
+      "title": "Postgres replication slot - retained WAL bytes",
       "description": "If this grows without bound, Debezium is not consuming the slot.",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
       "datasource": { "type": "prometheus", "uid": "Prometheus" },

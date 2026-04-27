@@ -142,7 +142,7 @@ func TestDeleteRandom_HappyAndEmpty(t *testing.T) {
 		t.Fatalf("1st delete: want 200, got %d", rec.Code)
 	}
 
-	// Now empty — second delete must be 204.
+	// Now empty - second delete must be 204.
 	req = httptest.NewRequest("DELETE", "/users/random", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

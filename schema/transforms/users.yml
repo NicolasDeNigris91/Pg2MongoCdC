@@ -17,4 +17,4 @@ fields:
   created_at: { type: timestamptz, target: createdAt, format: iso8601, index: true }
   updated_at: { type: timestamptz, target: updatedAt, format: iso8601 }
 
-# No joins for users — orders/order_items are linked via user_id on their side.
+# No joins for users - orders/order_items are linked via user_id on their side.

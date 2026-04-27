@@ -1,5 +1,5 @@
 // Package kafka adapts franz-go's kgo.Client to the consumer.KafkaConsumer
-// interface. The wiring is intentionally thin — no logic lives here. Logic
+// interface. The wiring is intentionally thin - no logic lives here. Logic
 // is in the Loop (consumer) and the Writer; this package only translates
 // between franz-go types and our internal Record shape.
 package kafka
@@ -15,7 +15,7 @@ import (
 )
 
 // FranzConsumer adapts a franz-go kgo.Client to the consumer.KafkaConsumer
-// interface used by the consume loop. It is intentionally thin — the
+// interface used by the consume loop. It is intentionally thin - the
 // interesting semantics (batching, commit-after-side-effect) live in the
 // consumer package, not here.
 type FranzConsumer struct {
@@ -37,7 +37,7 @@ func New(brokers []string, groupID, topicRegex string) (*FranzConsumer, error) {
 		kgo.HeartbeatInterval(3*time.Second),
 		// A pattern-subscribing consumer only picks up new topics on the
 		// next metadata refresh. Shorten it so freshly-created cdc.*
-		// topics are subscribed within seconds, not the 5m default —
+		// topics are subscribed within seconds, not the 5m default -
 		// otherwise a cold start race leaves the consumer with 0
 		// partitions, exactly the Week-1 symptom we hit before.
 		kgo.MetadataMaxAge(10*time.Second),
@@ -56,7 +56,7 @@ func (f *FranzConsumer) Close() {
 
 // Poll blocks up to a few seconds waiting for new records, returning an
 // empty slice if the broker had nothing for us. Errors are surfaced only
-// if every partition errored — transient per-partition errors are not
+// if every partition errored - transient per-partition errors are not
 // propagated (franz-go retries them internally).
 func (f *FranzConsumer) Poll(ctx context.Context) ([]consumer.Record, error) {
 	fetches := f.client.PollFetches(ctx)
@@ -81,7 +81,7 @@ func (f *FranzConsumer) Poll(ctx context.Context) ([]consumer.Record, error) {
 }
 
 // MarkCommit flags a record as ready to commit once CommitMarked runs.
-// Uses franz-go's MarkCommitRecords path — it wires through the same
+// Uses franz-go's MarkCommitRecords path - it wires through the same
 // group-session epoch tracking that CommitMarkedOffsets expects. An
 // earlier attempt with MarkCommitOffsets(Epoch:-1) silently failed to
 // commit (kafka-consumer-groups reported CURRENT-OFFSET=- forever).

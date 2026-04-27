@@ -88,7 +88,7 @@ func (l *Loop) RunOnce(ctx context.Context) error {
 		}
 		if derr != nil {
 			// Decode error: fail the whole batch. DLQ routing belongs here in
-			// a future cycle — at that point we would mark the record instead.
+			// a future cycle - at that point we would mark the record instead.
 			return fmt.Errorf("decode offset=%d: %w", r.Offset, derr)
 		}
 		events = append(events, ev)

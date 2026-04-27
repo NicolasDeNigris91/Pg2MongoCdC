@@ -6,7 +6,7 @@
 
 ## Context
 
-The source schema will evolve during the pipeline's lifetime: new columns, renamed columns, changed types, dropped columns. If the pipeline cannot handle these gracefully, every schema change becomes a downtime event — defeating the project's whole premise of "zero-downtime migration".
+The source schema will evolve during the pipeline's lifetime: new columns, renamed columns, changed types, dropped columns. If the pipeline cannot handle these gracefully, every schema change becomes a downtime event - defeating the project's whole premise of "zero-downtime migration".
 
 Two kinds of schema guarantees matter:
 
@@ -17,9 +17,9 @@ Two kinds of schema guarantees matter:
 
 **Use both, and be explicit about which solves what.**
 
-- **Confluent Schema Registry with `BACKWARD` compatibility mode** — enforces wire compatibility between Debezium (producer) and transformer (consumer).
-- **YAML transform rules (from [ADR-004](./004-yaml-transforms-over-code.md)) versioned via `schemaVersion:` field** — describes the semantic mapping and is the unit of change for dual-write windows.
-- **`schemaVersion` written into every Mongo document** — gives us an audit trail and enables dual-read by downstream consumers of Mongo.
+- **Confluent Schema Registry with `BACKWARD` compatibility mode** - enforces wire compatibility between Debezium (producer) and transformer (consumer).
+- **YAML transform rules (from [ADR-004](./004-yaml-transforms-over-code.md)) versioned via `schemaVersion:` field** - describes the semantic mapping and is the unit of change for dual-write windows.
+- **`schemaVersion` written into every Mongo document** - gives us an audit trail and enables dual-read by downstream consumers of Mongo.
 
 ### Week-1 exception: JsonConverter
 
@@ -27,7 +27,7 @@ The Week 1 walking skeleton uses `org.apache.kafka.connect.json.JsonConverter` (
 
 The Avro switch happens at Week 2 when we replace the off-the-shelf Mongo sink connector with our own Go sink. At that point we control both ends of the wire and can pin exact client versions, eliminating the packaging ambiguity.
 
-The Schema Registry container **still runs** in the dev stack today, unused, so the compose graph does not change when Avro flips on. The wire compatibility story in this ADR applies the moment we switch — no architectural redesign needed.
+The Schema Registry container **still runs** in the dev stack today, unused, so the compose graph does not change when Avro flips on. The wire compatibility story in this ADR applies the moment we switch - no architectural redesign needed.
 
 ## Evolution playbook
 
@@ -60,7 +60,7 @@ The `schemaVersion` field on every Mongo document tells us at a glance which map
 2. Alert if any downstream Mongo consumer queries this field (via Mongo profiler).
 3. Drop from the YAML rule, bump `schemaVersion`.
 
-Never silently stop writing a field — that surfaces as a quiet null-filling bug in downstream code months later.
+Never silently stop writing a field - that surfaces as a quiet null-filling bug in downstream code months later.
 
 ## Why both mechanisms
 
@@ -77,7 +77,7 @@ Never silently stop writing a field — that surfaces as a quiet null-filling bu
 
 - **JSON Schema over Avro.** Larger payloads, slower serde, weaker tooling. Rejected.
 - **Protobuf.** Strong compatibility story but Debezium + Postgres CDC has first-class Avro support and weaker Protobuf support. Not worth fighting the tools.
-- **Schema-on-read (no wire schema at all).** Rejected — every consumer would need to re-implement validation.
+- **Schema-on-read (no wire schema at all).** Rejected - every consumer would need to re-implement validation.
 
 ## Consequences
 

@@ -1,4 +1,4 @@
-# Runbook — what to do when each alert fires
+# Runbook - what to do when each alert fires
 
 Every alert from `observability/prometheus/alerts.yml` has a section here. Keep the sections short, declarative, and in the same order as the alerts file.
 
@@ -25,9 +25,9 @@ Every alert from `observability/prometheus/alerts.yml` has a section here. Keep 
 
 **Likely causes.**
 
-1. Crash-recovery in progress — lag should shrink within one `max.poll.interval.ms` (5 min default).
-2. A stuck consumer thread — check logs for `Rebalance in progress`.
-3. Downstream write failure loop — correlate with `migration_write_errors_total`.
+1. Crash-recovery in progress - lag should shrink within one `max.poll.interval.ms` (5 min default).
+2. A stuck consumer thread - check logs for `Rebalance in progress`.
+3. Downstream write failure loop - correlate with `migration_write_errors_total`.
 
 **Do NOT** restart blindly. A rebalance storm amplifies lag. Wait 5 min first.
 
@@ -54,7 +54,7 @@ The headers include: `__dlq_error_reason`, `__dlq_source_offset`, `__dlq_source_
 ./scripts/reprocess-dlq.sh dlq.source      # Week 2+: reads, re-validates, re-produces
 ```
 
-Never `kafka-console-producer` the old event back verbatim — it will fail the same way.
+Never `kafka-console-producer` the old event back verbatim - it will fail the same way.
 
 ---
 
@@ -102,7 +102,7 @@ This only fires once the Week 2 sink-svc is running and writing `_migration_chec
 4. If the slot was dropped externally (someone ran `pg_drop_replication_slot`), you lost data from the WAL window since Debezium's last confirmed LSN. Full resnapshot required:
    ```bash
    curl -X DELETE localhost:8083/connectors/zdt-postgres-source
-   # re-register with snapshot.mode=initial — incurs a full table scan
+   # re-register with snapshot.mode=initial - incurs a full table scan
    ```
 
 ---

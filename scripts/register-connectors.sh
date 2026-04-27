@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Register Debezium (source) + MongoDB (sink) connectors.
-# Cross-platform alternative to `make register-connectors` — runs under
+# Cross-platform alternative to `make register-connectors` - runs under
 # Git Bash, WSL, macOS, Linux, or any POSIX shell with curl available.
 set -euo pipefail
 
@@ -34,7 +34,7 @@ register_one() {
       --data "$payload" \
       "$CONNECT_URL/connectors/$name/config" | sed 's/^/  /'
   else
-    # POST full body — creates if absent, 409 if already exists (then PUT the config fallback below)
+    # POST full body - creates if absent, 409 if already exists (then PUT the config fallback below)
     local http_code
     http_code=$(curl -sS -o /tmp/connect-resp.$$.json -w '%{http_code}' \
       -X POST -H "Content-Type: application/json" \
@@ -42,7 +42,7 @@ register_one() {
     if [ "$http_code" = "201" ]; then
       echo "  created"
     elif [ "$http_code" = "409" ]; then
-      echo "  already exists — skipping (use DELETE + re-run to replace)"
+      echo "  already exists - skipping (use DELETE + re-run to replace)"
     else
       echo "  ERROR (HTTP $http_code):"
       cat /tmp/connect-resp.$$.json
@@ -59,7 +59,7 @@ register_one "zdt-postgres-source" "$ROOT/connectors/debezium-postgres.json"
 # As of Week 2, the Mongo sink is our own Go service (services/sink/). The
 # off-the-shelf MongoDB Kafka Connector is kept on disk at
 # connectors/mongo-sink.json for historical comparison (chaos 01 lost 1
-# row against it — see docs/chaos-findings.md). To register the baseline
+# row against it - see docs/chaos-findings.md). To register the baseline
 # explicitly, set REGISTER_OFFSHELF_SINK=1.
 if [ "${REGISTER_OFFSHELF_SINK:-0}" = "1" ]; then
   register_one "zdt-mongo-sink" "$ROOT/connectors/mongo-sink.json"

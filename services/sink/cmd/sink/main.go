@@ -125,7 +125,7 @@ func buildHTTPMux(m *metrics.Metrics) http.Handler {
 }
 
 // instrumentedWriter decorates a Writer with Prometheus counters. Kept in
-// main.go (not internal/metrics) because it is composition of the two —
+// main.go (not internal/metrics) because it is composition of the two -
 // neither package owns both.
 type instrumentedWriter struct {
 	inner consumer.Writer

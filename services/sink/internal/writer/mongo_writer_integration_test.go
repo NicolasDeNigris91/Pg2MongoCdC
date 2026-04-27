@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// Integration test — runs against a live Mongo on localhost:27017 by default.
+// Integration test - runs against a live Mongo on localhost:27017 by default.
 // Override with MONGO_URI. Skipped by default; enabled with `-tags integration`.
 //
 // This is the single most important test in the repository: it proves at
@@ -74,7 +74,7 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 		t.Fatalf("doc after insert wrong: %v", doc)
 	}
 
-	// 2. Replay the SAME event (same LSN): must be a no-op — document unchanged.
+	// 2. Replay the SAME event (same LSN): must be a no-op - document unchanged.
 	//    This is the at-least-once duplicate-delivery case the LSN gate rejects.
 	if err := w.Apply(ctx, ev); err != nil {
 		t.Fatalf("replay: %v", err)
@@ -98,7 +98,7 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 	}
 
 	// 4. STALE event (LSN=150, smaller than current 200): must NOT overwrite.
-	//    This is the out-of-order replay case — for example, after a DLQ
+	//    This is the out-of-order replay case - for example, after a DLQ
 	//    reprocess of an older event. ADR-002 demands this be a no-op.
 	ev.LSN = 150
 	ev.After["email"] = "STALE@wrong.com"

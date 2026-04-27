@@ -11,7 +11,7 @@ set -euo pipefail
 # Wait for the pipeline to drain before hashing. Instead of a blind sleep,
 # poll counts until every table matches on two consecutive samples (so we
 # don't race with a single in-flight event from loadgen), or until
-# DRAIN_SECS elapses — whichever comes first.
+# DRAIN_SECS elapses - whichever comes first.
 DRAIN_SECS="${DRAIN_SECS:-60}"
 POLL_INTERVAL="${POLL_INTERVAL:-2}"
 TABLES=(users orders order_items)
@@ -61,7 +61,7 @@ for t in "${TABLES[@]}"; do
   mongo_c=$(mongo_count "$t")
 
   # Canonical checksum: id-sorted rows concatenated into a single string, md5'd.
-  # Note: we do NOT md5 Mongo rows here — document shape differs from PG (by
+  # Note: we do NOT md5 Mongo rows here - document shape differs from PG (by
   # design, after schema transforms). Full field-level checksum requires the
   # Go sink's LSN-gated path (Week 2+).
   pg_hash=$(docker compose exec -T postgres psql -U app -d app -tAc \

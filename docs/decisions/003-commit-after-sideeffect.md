@@ -22,7 +22,7 @@ for _, msg := range consumer.Poll(...) {
         continue
     }
     if err := downstream.Write(out); err != nil {
-        // do NOT mark — will be redelivered on restart
+        // do NOT mark - will be redelivered on restart
         return err
     }
     consumer.MarkCommit(msg)
@@ -38,11 +38,11 @@ Kafka consumer settings:
 
 ## Why
 
-1. **Commit-before-write is data loss.** If we commit first and then crash, the consumer resumes from the *next* offset on restart — the in-flight message is silently dropped.
+1. **Commit-before-write is data loss.** If we commit first and then crash, the consumer resumes from the *next* offset on restart - the in-flight message is silently dropped.
 
-2. **Commit-after-write is at-least-once.** If we crash between the write and the commit, the message is redelivered on restart. The write is re-applied. The idempotency layer from [ADR-002](./002-lsn-gated-upserts.md) makes this a no-op. We trade "exactly once" for "exactly one effect" — the latter is what actually matters.
+2. **Commit-after-write is at-least-once.** If we crash between the write and the commit, the message is redelivered on restart. The write is re-applied. The idempotency layer from [ADR-002](./002-lsn-gated-upserts.md) makes this a no-op. We trade "exactly once" for "exactly one effect" - the latter is what actually matters.
 
-3. **Batched commits keep throughput up.** Committing every message caps throughput at the Kafka commit round-trip time (~5ms) per message. Batching at 1000 or 5s lifts it by two orders of magnitude, at a worst-case redelivery cost of up to 1000 duplicates on crash — all absorbed by ADR-002.
+3. **Batched commits keep throughput up.** Committing every message caps throughput at the Kafka commit round-trip time (~5ms) per message. Batching at 1000 or 5s lifts it by two orders of magnitude, at a worst-case redelivery cost of up to 1000 duplicates on crash - all absorbed by ADR-002.
 
 4. **DLQ-send counts as a successful downstream write.** Once a poison event is in `dlq.source` or `dlq.sink`, its Kafka-level durability guarantees are the same as any other message. Marking the original offset committed prevents a poison-loop where the same bad event blocks the pipeline indefinitely.
 
@@ -54,7 +54,7 @@ Kafka consumer settings:
 | Transformer / sink consumer offsets | Kafka broker | `__consumer_offsets` (built-in) | Resume at-least-once processing |
 | Sink checkpoint doc | sink-svc | `migration._migration_checkpoints` (Mongo) | Cross-system recovery if `__consumer_offsets` is lost |
 
-The third layer is belt-and-braces. In the happy path it is only written for observability (`migration_checkpoint_staleness_seconds`). It earns its keep in the disaster-recovery scenario where Kafka's internal offsets topic is lost — we can reset the consumer group from the LSN recorded in Mongo and replay, with ADR-002 absorbing the duplicates.
+The third layer is belt-and-braces. In the happy path it is only written for observability (`migration_checkpoint_staleness_seconds`). It earns its keep in the disaster-recovery scenario where Kafka's internal offsets topic is lost - we can reset the consumer group from the LSN recorded in Mongo and replay, with ADR-002 absorbing the duplicates.
 
 ## What this prevents
 
@@ -64,15 +64,15 @@ The third layer is belt-and-braces. In the happy path it is only written for obs
 ## What this does NOT prevent
 
 - **Duplicates in the destination.** By design. [ADR-002](./002-lsn-gated-upserts.md) absorbs them.
-- **Reordering on rebalance across partitions.** Handled by PK-partitioning (see [ADR-001](./001-kafka-over-rabbitmq.md)) — same PK = same partition = ordered delivery.
+- **Reordering on rebalance across partitions.** Handled by PK-partitioning (see [ADR-001](./001-kafka-over-rabbitmq.md)) - same PK = same partition = ordered delivery.
 
 ## Trade-offs we accept
 
 - **Observable duplicate rate.** `migration_idempotent_skip_total` will tick non-zero during consumer-group rebalances and after crashes. This is expected behaviour, not an alert.
-- **Up to 5 seconds / 1000 messages of re-work on crash.** Acceptable — duplicates are free under ADR-002.
+- **Up to 5 seconds / 1000 messages of re-work on crash.** Acceptable - duplicates are free under ADR-002.
 
 ## Alternatives considered
 
-- **`enable.auto.commit=true`.** Rejected — non-deterministic commit timing relative to downstream writes.
-- **Commit every message synchronously.** Rejected — throughput collapse.
+- **`enable.auto.commit=true`.** Rejected - non-deterministic commit timing relative to downstream writes.
+- **Commit every message synchronously.** Rejected - throughput collapse.
 - **Kafka transactions + exactly-once.** Rejected across heterogeneous sinks (see ADR-002 rationale).

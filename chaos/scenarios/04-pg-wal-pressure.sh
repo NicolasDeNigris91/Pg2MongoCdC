@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PASS: pausing the connect worker for 2 minutes while writes continue does
-#       not lose events — the replication slot keeps WAL alive; on resume,
+#       not lose events - the replication slot keeps WAL alive; on resume,
 #       Debezium catches up and PG↔Mongo converge.
 set -euo pipefail
 

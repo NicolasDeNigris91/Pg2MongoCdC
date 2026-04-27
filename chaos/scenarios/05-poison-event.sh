@@ -26,7 +26,7 @@ docker compose exec -T postgres psql -U app -d app -c \
 sleep 10
 
 echo "Checking DLQ topics ..."
-docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list | grep -E '^dlq\.' || echo "(no DLQ topics yet — expected if no errors)"
+docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list | grep -E '^dlq\.' || echo "(no DLQ topics yet - expected if no errors)"
 
 echo "Verifying the good post-poison event landed in Mongo ..."
 docker compose exec -T mongo mongosh --quiet \

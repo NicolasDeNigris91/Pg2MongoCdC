@@ -21,13 +21,13 @@ scrape_configs:
     static_configs:
       - targets: ["postgres-exporter:9187"]
 
-  # Kafka Connect exposes JMX — scraping via jmx_exporter would go here once
+  # Kafka Connect exposes JMX - scraping via jmx_exporter would go here once
   # we mount a config. Out of scope for the first pass; chaos overlay still
   # works without these two.
   # - job_name: connect
   #   static_configs: [{ targets: ["connect:5556"] }]
 
-  # Week 2+ — our own Go services expose /metrics.
+  # Week 2+ - our own Go services expose /metrics.
   - job_name: transformer
     static_configs:
       - targets: ["transformer:8080"]

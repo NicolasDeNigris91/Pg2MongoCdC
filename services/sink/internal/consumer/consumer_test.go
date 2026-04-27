@@ -53,7 +53,7 @@ func (f *fakeWriter) ApplyBatch(_ context.Context, evs []writer.CDCEvent) error 
 	return nil
 }
 
-// Fixtures — minimal valid Debezium JSON envelopes.
+// Fixtures - minimal valid Debezium JSON envelopes.
 func makeInsert(pk, lsn int64) (key, value []byte) {
 	key = []byte(fmt.Sprintf(`{"payload":{"id":%d}}`, pk))
 	value = []byte(fmt.Sprintf(`{"payload":{"before":null,"after":{"id":%d},"source":{"lsn":%d,"table":"users"},"op":"c"}}`, pk, lsn))
@@ -90,7 +90,7 @@ func TestLoop_SuccessfulBatchCommitsAllOffsets(t *testing.T) {
 }
 
 // ADR-003 under batch semantics: if ApplyBatch fails, the Loop must NOT
-// commit anything — the whole poll batch will be redelivered. Downstream
+// commit anything - the whole poll batch will be redelivered. Downstream
 // idempotency (ADR-002 LSN gate) absorbs whatever records were partially
 // flushed on the Mongo side before the failure.
 func TestLoop_FailedBatchCommitsNothing(t *testing.T) {

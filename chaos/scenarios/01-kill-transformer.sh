@@ -4,7 +4,7 @@
 #
 # REQUIRES: Week 2+ (transformer-svc container). Until then, this script
 # runs a no-op on the current off-the-shelf Mongo sink connector path
-# (kills the connect container instead — which exercises the same crash-
+# (kills the connect container instead - which exercises the same crash-
 # recovery story at a coarser granularity).
 set -euo pipefail
 
@@ -16,7 +16,7 @@ TARGET="${TARGET:-sink}"
 echo "Scenario 01: kill $TARGET mid-stream"
 echo "============================================"
 echo "Starting background load for ${DURATION}s..."
-# Background load — replace with k6 once Week 3 lands
+# Background load - replace with k6 once Week 3 lands
 (
   for i in $(seq 1 "$DURATION"); do
     docker compose exec -T postgres psql -U app -d app -c \

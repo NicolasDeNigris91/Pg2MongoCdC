@@ -12,7 +12,7 @@ spec:
   replicas: {{ .Values.transformer.replicaCount }}
   {{- end }}
   # RollingUpdate with maxUnavailable=0 so the consumer group stays balanced
-  # during a rollout — never have fewer instances than the desired count.
+  # during a rollout - never have fewer instances than the desired count.
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -85,7 +85,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
-          # Readiness is intentionally a deeper check than liveness — see
+          # Readiness is intentionally a deeper check than liveness - see
           # docs/slo.md for why "container alive" is not the same as "events
           # flowing". Production should layer a custom readiness check
           # (e.g. consumer-group-lag-bounded) on top of /healthz.

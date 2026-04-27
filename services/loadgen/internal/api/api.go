@@ -19,7 +19,7 @@ type Store interface {
 	DeleteRandomUser(ctx context.Context) (int64, error)                     // returns id deleted, 0 if no users
 }
 
-// ErrNoRows signals "zero rows affected" — handlers translate to 404.
+// ErrNoRows signals "zero rows affected" - handlers translate to 404.
 var ErrNoRows = errors.New("api: no rows")
 
 // Handler owns the /users and /healthz routes. The Store dependency is
@@ -87,7 +87,7 @@ func (h *Handler) updateRandom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if id == 0 {
-		// No users to update yet — k6 is running faster than inserts. Not an error.
+		// No users to update yet - k6 is running faster than inserts. Not an error.
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

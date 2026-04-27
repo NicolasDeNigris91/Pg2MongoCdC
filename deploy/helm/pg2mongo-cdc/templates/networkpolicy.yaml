@@ -2,7 +2,7 @@
 {{/*
 Network policies. Default is deny-all per workload, then explicit allow for
 the specific egress paths each component needs. Pattern follows the
-defense-in-depth model in docs/security.md — every connection between
+defense-in-depth model in docs/security.md - every connection between
 pipeline workers and the data plane is enumerated, nothing is permitted by
 omission.
 */}}
@@ -39,7 +39,7 @@ spec:
           port: 9092
         - protocol: TCP
           port: 9093
-    # DNS — required for service discovery.
+    # DNS - required for service discovery.
     - to: []
       ports:
         - protocol: UDP
@@ -77,7 +77,7 @@ spec:
           port: 9092
         - protocol: TCP
           port: 9093
-    # MongoDB — typical 27017; SRV/Atlas may add 27018-27019.
+    # MongoDB - typical 27017; SRV/Atlas may add 27018-27019.
     - to: []
       ports:
         - protocol: TCP

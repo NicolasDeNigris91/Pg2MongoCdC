@@ -17,13 +17,13 @@ trust levels:
 
 | Data | Confidentiality | Integrity | Availability |
 |---|---|---|---|
-| User application data (rows in PG) | High — typically PII | High — corruption is the worst outcome | Medium — short outages tolerable |
-| CDC events on Kafka | Same as source rows | Critical — drift = silent data loss | Same as source |
-| Operational secrets (DB credentials, API keys) | Critical | High | Low — short rotation pain tolerable |
+| User application data (rows in PG) | High - typically PII | High - corruption is the worst outcome | Medium - short outages tolerable |
+| CDC events on Kafka | Same as source rows | Critical - drift = silent data loss | Same as source |
+| Operational secrets (DB credentials, API keys) | Critical | High | Low - short rotation pain tolerable |
 
 ### Threat actors considered
 
-- **External attacker, internet-reachable surfaces.** None — the
+- **External attacker, internet-reachable surfaces.** None - the
   pipeline has no public ingress in the production topology.
 - **External attacker, network-adjacent.** Anyone who reaches the
   cluster's pod network. Mitigated by network policies + mTLS on
@@ -104,19 +104,19 @@ Production must:
 
 Reference: [`deployment.md`](./deployment.md) "Configure secrets".
 
-- `postgres-credentials` — `username` + `password` for the Debezium
+- `postgres-credentials` - `username` + `password` for the Debezium
   replication user. Scope: `LOGIN REPLICATION` + `SELECT` on source
   tables only.
-- `mongo-uri` — full SRV URI with embedded credentials for a Mongo
+- `mongo-uri` - full SRV URI with embedded credentials for a Mongo
   user with `readWrite` on the `migration` database, no other
   privileges.
-- `kafka-credentials` — SASL/SCRAM username + password. Each service
+- `kafka-credentials` - SASL/SCRAM username + password. Each service
   gets its own user with ACLs scoped to the topics it produces or
   consumes:
   - Connect: produce on `cdc.*` and `dlq.source`.
   - Transformer: consume `cdc.*`, produce `transformed.*`.
   - Sink: consume `transformed.*`, produce `dlq.sink`.
-- `schema-registry-credentials` — basic auth for write access (if
+- `schema-registry-credentials` - basic auth for write access (if
   Schema Registry is enabled).
 
 ## Authentication and authorization
@@ -203,7 +203,7 @@ These controls are present in the code today (not just doc):
   on source tables only. No DDL, no DELETE, no CONNECT to other
   databases.
 - **Lint discipline.** `.golangci.yml` includes `errcheck`,
-  `errorlint`, `bodyclose`, `noctx` — the linters that catch
+  `errorlint`, `bodyclose`, `noctx` - the linters that catch
   unhandled errors, unwrapped errors, leaked HTTP bodies, and
   context-less HTTP requests on the hot path.
 
@@ -213,9 +213,9 @@ See [`SECURITY.md`](../SECURITY.md) at the repo root.
 
 ## What this guide does NOT cover
 
-- General Kubernetes hardening (CIS benchmark, etc.) — out of scope
+- General Kubernetes hardening (CIS benchmark, etc.) - out of scope
   but assumed.
-- Application-level authentication — there is no public application
+- Application-level authentication - there is no public application
   surface to authenticate.
-- Cryptographic key generation procedures — assume your platform
+- Cryptographic key generation procedures - assume your platform
   team has a documented KMS workflow.

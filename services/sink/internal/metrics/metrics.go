@@ -11,20 +11,20 @@ import (
 )
 
 // Metrics bundles every collector the sink exposes. The zero value is
-// NOT usable — always use New.
+// NOT usable - always use New.
 type Metrics struct {
 	Reg *prometheus.Registry
 
-	// events_processed_total{stage,table,op} — the throughput counter.
+	// events_processed_total{stage,table,op} - the throughput counter.
 	EventsProcessed *prometheus.CounterVec
 
-	// write_errors_total{sink,reason} — Mongo write failures by category.
+	// write_errors_total{sink,reason} - Mongo write failures by category.
 	WriteErrors *prometheus.CounterVec
 
-	// replication_lag_seconds{table} — now() - event.source_ts at sink commit.
+	// replication_lag_seconds{table} - now() - event.source_ts at sink commit.
 	ReplicationLag *prometheus.HistogramVec
 
-	// idempotent_skip_total{table} — LSN-gate rejections (E11000 swallows,
+	// idempotent_skip_total{table} - LSN-gate rejections (E11000 swallows,
 	// tombstones skipped). Expected non-zero under replay; anomaly otherwise.
 	IdempotentSkip *prometheus.CounterVec
 }

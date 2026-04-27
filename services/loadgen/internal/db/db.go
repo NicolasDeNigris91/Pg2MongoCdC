@@ -1,5 +1,5 @@
 // Package db provides a Postgres-backed Store for the loadgen service.
-// Uses pgx native API for performance — the sidecar is on the hot path
+// Uses pgx native API for performance - the sidecar is on the hot path
 // when k6 is hammering it at a few thousand RPS.
 package db
 
@@ -59,7 +59,7 @@ func (s *Store) InsertUser(ctx context.Context, email, fullName string, profile 
 	return id, nil
 }
 
-// UpdateRandomUser picks a row via TABLESAMPLE SYSTEM — orders-of-magnitude
+// UpdateRandomUser picks a row via TABLESAMPLE SYSTEM - orders-of-magnitude
 // faster than `ORDER BY random()` on large tables. Falls back to `ORDER BY id
 // LIMIT 1` when the sample returns nothing, which is common on small tables.
 // Returns 0 when the table is empty (handler translates to 204).
@@ -76,7 +76,7 @@ func (s *Store) UpdateRandomUser(ctx context.Context, newFullName string) (int64
 		if err.Error() == "no rows in result set" {
 			return 0, nil
 		}
-		// Fallback: small tables may not produce a sample — pick any.
+		// Fallback: small tables may not produce a sample - pick any.
 		err2 := s.Pool.QueryRow(ctx,
 			`UPDATE users SET full_name = $1, updated_at = now()
 			 WHERE id = (SELECT id FROM users ORDER BY id LIMIT 1)
@@ -93,7 +93,7 @@ func (s *Store) UpdateRandomUser(ctx context.Context, newFullName string) (int64
 	return id, nil
 }
 
-// DeleteRandomUser removes the lowest-id row — deterministic ordering lets
+// DeleteRandomUser removes the lowest-id row - deterministic ordering lets
 // the chaos scripts reason about which rows are deleted first. Returns 0
 // when the table is empty (handler translates to 204).
 func (s *Store) DeleteRandomUser(ctx context.Context) (int64, error) {

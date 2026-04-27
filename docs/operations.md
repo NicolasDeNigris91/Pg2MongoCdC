@@ -22,7 +22,7 @@ most expensive to verify:
 | Consumer group lag | `kafka_consumer_lag` per group | The transformer or sink is consuming in step with what Debezium produces. |
 | Row-count parity | PG count vs Mongo count per table | The pipeline is end-to-end correct. The slowest signal but the only one that matters for correctness. |
 
-A common failure mode is "container healthy + zero progress" — see the
+A common failure mode is "container healthy + zero progress" - see the
 v1.0-polish entry in [chaos-findings.md](./chaos-findings.md) for the
 silent transformer cold-start hang where every container reported
 healthy while no record was being processed. Always check at least
@@ -80,7 +80,7 @@ The summary is:
   unbalance the group during deploy.
 - **Schema rule change.** YAML edit under `schema/transforms/`,
   PR review, merge to `main`, redeploy transformer. Sink does not
-  need a redeploy — it consumes whatever shape transformer produces.
+  need a redeploy - it consumes whatever shape transformer produces.
 - **Kafka topic config change.** Avoid in-place mutation of
   partitions or replication factor under load. The right path is
   create a new topic with desired config, dual-write, cut consumers
@@ -112,7 +112,7 @@ Helm rollback is the standard path:
 helm rollback pg2mongo-cdc <previous-revision>
 ```
 
-The Go services are stateless — rollback is safe at any time. Kafka
+The Go services are stateless - rollback is safe at any time. Kafka
 consumer groups will rebalance, which produces a brief lag spike
 but no data loss (LSN gate absorbs any redelivery).
 
@@ -132,7 +132,7 @@ back across a schema change, also revert the YAML rule and redeploy.
 
 **Horizontal scaling rule of thumb.** Adding a transformer or sink
 replica beyond the partition count of its source topic adds
-*nothing* — the extra consumer sits idle. If you need more
+*nothing* - the extra consumer sits idle. If you need more
 parallelism, increase partitions first (and accept the rebalance
 that follows), then add replicas.
 
@@ -144,7 +144,7 @@ event payload `B` bytes:
 - **Kafka throughput**: `R × B × 2` (CDC + transformed topics).
   At RF=3, multiply by 3 again for replication traffic.
 - **Mongo write IOPS**: `R / batch_size`. Default sink batch size
-  is whatever a single Kafka poll returns (~500–1000 records under
+  is whatever a single Kafka poll returns (~500-1000 records under
   load), so IOPS ≈ `R / 750`.
 - **Postgres WAL retention**: at least
   `lag_tolerance_seconds × wal_generation_rate`. Track
@@ -190,7 +190,7 @@ without data loss:
 - **Mongo**: stepdown of the primary triggers a ~10s window where
   writes are buffered by the driver. Sink retries automatically.
 - **Sink / Transformer**: rolling restart triggers a consumer group
-  rebalance (~5–10 s lag spike). Acceptable inside business hours.
+  rebalance (~5-10 s lag spike). Acceptable inside business hours.
 
 ## Common operator tasks
 
@@ -231,7 +231,7 @@ and the sink's logs around the row's `updated_at` timestamp.
 ### Pause the pipeline gracefully
 
 ```bash
-# Pause Debezium — stops new events at the source
+# Pause Debezium - stops new events at the source
 curl -X PUT https://connect.your.cluster/connectors/zdt-postgres-source/pause
 # Wait for downstream to drain
 # (verify via consumer group lag = 0)
@@ -240,7 +240,7 @@ curl -X PUT https://connect.your.cluster/connectors/zdt-postgres-source/resume
 ```
 
 Pausing Debezium is **safer** than stopping the sink for short windows
-— the replication slot retains the WAL position; the sink's offset
+- the replication slot retains the WAL position; the sink's offset
 state is unaffected.
 
 ## What this guide does NOT cover

@@ -29,7 +29,7 @@ The harness:
 
 ## Why Toxiproxy
 
-1. **TCP-level, application-agnostic.** Works for Kafka, Mongo, HTTP — anything TCP. No application changes to test chaos.
+1. **TCP-level, application-agnostic.** Works for Kafka, Mongo, HTTP - anything TCP. No application changes to test chaos.
 2. **Programmable via HTTP API.** `toxiproxy-cli toxic add -t latency ...` is one line. Scenarios are bash, not framework-specific DSL.
 3. **Deterministic.** A latency toxic adds exactly N ms. Not "some latency, sometimes".
 4. **Tiny.** ~20MB container, starts in <1s. Runs on a laptop.
@@ -59,14 +59,14 @@ is grepped by `make chaos` to enforce that every scenario *has* a pass criterion
 
 ## Trade-offs we accept
 
-- **No process-kill fault injection inside containers (OOMKiller, signal storms, clock skew).** Toxiproxy is network-only. We cover container-level faults with `docker kill` / `docker pause`. Kernel-level faults (e.g., `chaos-monkey` style disk fills) are out of scope — if we ever need them, we add a [Pumba](https://github.com/alexei-led/pumba) container.
-- **No distributed systems bugs that only manifest at cloud-scale (e.g., cross-AZ clock skew).** Accepted — single-machine chaos catches >90% of bugs in this pipeline class, which is what a portfolio artifact is for.
+- **No process-kill fault injection inside containers (OOMKiller, signal storms, clock skew).** Toxiproxy is network-only. We cover container-level faults with `docker kill` / `docker pause`. Kernel-level faults (e.g., `chaos-monkey` style disk fills) are out of scope - if we ever need them, we add a [Pumba](https://github.com/alexei-led/pumba) container.
+- **No distributed systems bugs that only manifest at cloud-scale (e.g., cross-AZ clock skew).** Accepted - single-machine chaos catches >90% of bugs in this pipeline class, which is what a portfolio artifact is for.
 
 ## Alternatives considered
 
 - **Chaos Mesh.** Requires K8s. Rejected for laptop demo.
 - **Gremlin (SaaS).** Paywalled. Rejected.
-- **Pumba.** Stronger on container-level chaos, weaker on network-level. Rejected for now — can be added without changing the harness shape.
+- **Pumba.** Stronger on container-level chaos, weaker on network-level. Rejected for now - can be added without changing the harness shape.
 
 ## Consequences
 

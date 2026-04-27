@@ -4,16 +4,16 @@
 #
 # This chart deploys ONLY the pipeline workers (Connect, transformer, sink).
 # The data plane (Postgres, Kafka, Schema Registry, MongoDB) is assumed to
-# exist externally — see docs/deployment.md in the source repo.
+# exist externally - see docs/deployment.md in the source repo.
 
 # -----------------------------------------------------------------------------
-# Container images. Pinned tags only — never use :latest in production.
+# Container images. Pinned tags only - never use :latest in production.
 # -----------------------------------------------------------------------------
 image:
   registry: ghcr.io/nicolasdenigris91
   pullPolicy: IfNotPresent
   pullSecrets: []
-  # Per-service tags — defaulted to the chart appVersion. Override individually
+  # Per-service tags - defaulted to the chart appVersion. Override individually
   # for canary or partial rollouts.
   transformerRepository: pg2mongo-cdc-transformer
   sinkRepository: pg2mongo-cdc-sink
@@ -41,7 +41,7 @@ kafka:
   # Secret containing keys: username, password (SASL/SCRAM-SHA-512)
   credentialsSecret: kafka-credentials
   # Required for Avro envelope evolution (ADR-006). Set to false to use
-  # JsonConverter — simpler, no schema evolution guarantees.
+  # JsonConverter - simpler, no schema evolution guarantees.
   schemaRegistry:
     enabled: true
     url: https://schema-registry.your-domain.local
@@ -71,7 +71,7 @@ transformer:
       cpu: 1000m
       memory: 512Mi
 
-  # Horizontal Pod Autoscaler. Bounded by the partition count of cdc.* topics —
+  # Horizontal Pod Autoscaler. Bounded by the partition count of cdc.* topics -
   # adding replicas beyond that adds idle consumers, not throughput.
   hpa:
     enabled: true
@@ -165,7 +165,7 @@ connect:
   affinity: {}
 
 # -----------------------------------------------------------------------------
-# ServiceAccount for all three workloads. RBAC is intentionally minimal —
+# ServiceAccount for all three workloads. RBAC is intentionally minimal -
 # the pipeline does not call the Kubernetes API at runtime.
 # -----------------------------------------------------------------------------
 serviceAccount:

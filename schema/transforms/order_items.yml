@@ -1,6 +1,6 @@
 # Present mostly so the transformer can maintain a compacted lookup topic
 # that the orders transform embeds from. order_items is NOT independently
-# written as its own Mongo collection in the default config — it only
+# written as its own Mongo collection in the default config - it only
 # materializes embedded inside orders documents.
 
 ruleSchemaVersion: 1

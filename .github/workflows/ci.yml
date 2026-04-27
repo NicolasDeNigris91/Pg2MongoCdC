@@ -28,21 +28,21 @@ jobs:
             services/transformer/go.sum
             services/loadgen/go.sum
 
-      - name: golangci-lint — sink
+      - name: golangci-lint - sink
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           working-directory: services/sink
           args: --config=${{ github.workspace }}/.golangci.yml
 
-      - name: golangci-lint — transformer
+      - name: golangci-lint - transformer
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           working-directory: services/transformer
           args: --config=${{ github.workspace }}/.golangci.yml
 
-      - name: golangci-lint — loadgen
+      - name: golangci-lint - loadgen
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: trivy — Dockerfile misconfig scan
+      - name: trivy - Dockerfile misconfig scan
         uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: config
@@ -67,7 +67,7 @@ jobs:
           exit-code: '1'
           hide-progress: true
 
-      - name: trivy — dependency CVE scan (sink)
+      - name: trivy - dependency CVE scan (sink)
         uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
@@ -77,7 +77,7 @@ jobs:
           hide-progress: true
           ignore-unfixed: true
 
-      - name: trivy — dependency CVE scan (transformer)
+      - name: trivy - dependency CVE scan (transformer)
         uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
@@ -87,7 +87,7 @@ jobs:
           hide-progress: true
           ignore-unfixed: true
 
-      - name: trivy — dependency CVE scan (loadgen)
+      - name: trivy - dependency CVE scan (loadgen)
         uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
@@ -100,7 +100,7 @@ jobs:
   # Go source security scan across all services. gosec catches the subset
   # of security-relevant bugs (weak crypto, unsafe SQL, open files without
   # close, etc.) that a generic lint does not flag. Using the binary
-  # directly instead of the securego/gosec@master action — the latter has
+  # directly instead of the securego/gosec@master action - the latter has
   # been flaky and the binary is trivially installable.
   gosec:
     runs-on: ubuntu-latest
@@ -115,15 +115,15 @@ jobs:
       - name: install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
-      - name: gosec — sink
+      - name: gosec - sink
         working-directory: services/sink
         run: gosec -fmt=text ./...
 
-      - name: gosec — transformer
+      - name: gosec - transformer
         working-directory: services/transformer
         run: gosec -fmt=text ./...
 
-      - name: gosec — loadgen
+      - name: gosec - loadgen
         working-directory: services/loadgen
         run: gosec -fmt=text ./...
 
@@ -144,28 +144,28 @@ jobs:
             services/transformer/go.sum
             services/loadgen/go.sum
 
-      - name: sink — test, vet, build
+      - name: sink - test, vet, build
         working-directory: services/sink
         run: |
           go test ./...
           go vet ./...
           go build ./...
 
-      - name: transformer — test, vet, build
+      - name: transformer - test, vet, build
         working-directory: services/transformer
         run: |
           go test ./...
           go vet ./...
           go build ./...
 
-      - name: loadgen — test, vet, build
+      - name: loadgen - test, vet, build
         working-directory: services/loadgen
         run: |
           go test ./...
           go vet ./...
           go build ./...
 
-      - name: bash scripts — syntax check
+      - name: bash scripts - syntax check
         run: |
           set -e
           for f in scripts/*.sh chaos/*.sh chaos/scenarios/*.sh; do
@@ -173,20 +173,20 @@ jobs:
           done
           echo "all scripts parse"
 
-      - name: JSON configs — validity
+      - name: JSON configs - validity
         run: |
           for f in connectors/*.json observability/**/*.json; do
             [ -f "$f" ] && node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" && echo "OK $f"
           done
 
-      - name: docker compose — validate all overlays
+      - name: docker compose - validate all overlays
         run: |
           docker compose -f docker-compose.yml config --quiet
           docker compose -f docker-compose.yml -f docker-compose.chaos.yml config --quiet
           docker compose -f docker-compose.yml -f docker-compose.chaos.yml -f docker-compose.toxiproxy.yml config --quiet
           POSTGRES_PASSWORD=ci docker compose -f docker-compose.prod.yml config --quiet
 
-      - name: helm — lint and template the chart
+      - name: helm - lint and template the chart
         run: |
           curl -fsSL https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz | tar -xz
           ./linux-amd64/helm lint deploy/helm/pg2mongo-cdc
@@ -198,7 +198,7 @@ jobs:
           docker run --rm -v /tmp:/work mikefarah/yq:latest \
             'true' /work/rendered.yaml > /dev/null
 
-      - name: "chaos scripts — every scenario carries a PASS criterion"
+      - name: "chaos scripts - every scenario carries a PASS criterion"
         run: |
           set -e
           for s in chaos/scenarios/*.sh; do

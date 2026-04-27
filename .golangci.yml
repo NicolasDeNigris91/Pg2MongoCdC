@@ -6,9 +6,9 @@
 #   - errcheck + errorlint because unchecked or unwrapped errors in CDC
 #     code paths is where silent data loss comes from.
 #   - bodyclose + noctx because the sink and transformer speak HTTP to
-#     Mongo and Kafka — resource leaks on the hot path are production
+#     Mongo and Kafka - resource leaks on the hot path are production
 #     incidents, not style quibbles.
-#   - Disable purely stylistic linters — too noisy relative to value.
+#   - Disable purely stylistic linters - too noisy relative to value.
 #
 # Run locally:
 #   docker run --rm -v "$PWD:/app" -w /app/services/sink \
@@ -38,7 +38,7 @@ linters:
     - unparam
   settings:
     errcheck:
-      # Ignore deferred Close() — best-effort at teardown, nothing
+      # Ignore deferred Close() - best-effort at teardown, nothing
       # useful to do if it fails.
       exclude-functions:
         - (io.Closer).Close

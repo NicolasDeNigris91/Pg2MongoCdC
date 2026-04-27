@@ -1,6 +1,6 @@
 {{- if .Values.podMonitor.enabled -}}
 {{/*
-PodMonitor for prometheus-operator. One per workload — labels target the
+PodMonitor for prometheus-operator. One per workload - labels target the
 matching component selector so a Prometheus instance can be scoped to scrape
 just the pipeline.
 */}}

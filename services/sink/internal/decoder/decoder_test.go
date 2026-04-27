@@ -12,7 +12,7 @@ import (
 // from the key, LSN from payload.source.lsn, table from payload.source.table,
 // and the full After map. Before must be nil for an insert.
 func TestDecode_Insert(t *testing.T) {
-	// What Debezium actually emits on our stack — peeked from cdc.users with
+	// What Debezium actually emits on our stack - peeked from cdc.users with
 	// kafka-console-consumer during Week 1 verification. Shrunk to essentials.
 	key := []byte(`{"schema":{},"payload":{"id":42}}`)
 	value := []byte(`{

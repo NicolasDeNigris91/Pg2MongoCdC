@@ -1,5 +1,5 @@
 {{/*
-Common labels and selector helpers. Kept tiny on purpose — this chart has
+Common labels and selector helpers. Kept tiny on purpose - this chart has
 three near-identical workloads, so a small _helpers.tpl avoids template
 duplication without becoming a meta-language of its own.
 */}}
@@ -22,7 +22,7 @@ duplication without becoming a meta-language of its own.
 {{- end -}}
 
 {{/*
-Common labels — applied to every resource. Component-specific labels are
+Common labels - applied to every resource. Component-specific labels are
 added inline at the resource level.
 */}}
 {{- define "pg2mongo-cdc.labels" -}}
@@ -47,7 +47,7 @@ app.kubernetes.io/component: {{ $component }}
 {{- end -}}
 
 {{/*
-ServiceAccount name — generated unless explicitly overridden.
+ServiceAccount name - generated unless explicitly overridden.
 */}}
 {{- define "pg2mongo-cdc.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
