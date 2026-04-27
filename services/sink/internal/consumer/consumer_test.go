@@ -53,19 +53,13 @@ func (f *fakeWriter) ApplyBatch(_ context.Context, evs []writer.CDCEvent) error 
 	return nil
 }
 
-// Fixtures - minimal valid Debezium JSON envelopes.
 func makeInsert(pk, lsn int64) (key, value []byte) {
 	key = []byte(fmt.Sprintf(`{"payload":{"id":%d}}`, pk))
 	value = []byte(fmt.Sprintf(`{"payload":{"before":null,"after":{"id":%d},"source":{"lsn":%d,"table":"users"},"op":"c"}}`, pk, lsn))
 	return
 }
 
-// --- tests ---
-
-// Happy path: a successful ApplyBatch is followed by MarkCommit on every
-// record and exactly one CommitMarked call. Tombstones mix in without
-// breaking the ordering invariant.
-func TestLoop_SuccessfulBatchCommitsAllOffsets(t *testing.T) {
+func TestLoop_BatchSuccess(t *testing.T) {
 	var recs []consumer.Record
 	for i, lsn := range []int64{100, 101, 102} {
 		k, v := makeInsert(int64(i+1), lsn)
@@ -89,11 +83,9 @@ func TestLoop_SuccessfulBatchCommitsAllOffsets(t *testing.T) {
 	}
 }
 
-// ADR-003 under batch semantics: if ApplyBatch fails, the Loop must NOT
-// commit anything - the whole poll batch will be redelivered. Downstream
-// idempotency (ADR-002 LSN gate) absorbs whatever records were partially
-// flushed on the Mongo side before the failure.
-func TestLoop_FailedBatchCommitsNothing(t *testing.T) {
+// On batch failure the loop must not commit anything; the whole poll batch
+// is redelivered.
+func TestLoop_BatchFailureCommitsNothing(t *testing.T) {
 	recs := []consumer.Record{}
 	for i, lsn := range []int64{100, 101, 102} {
 		k, v := makeInsert(int64(i+1), lsn)

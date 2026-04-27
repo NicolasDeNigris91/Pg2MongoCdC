@@ -64,7 +64,7 @@ The third layer is belt-and-braces. In the happy path it is only written for obs
 ## What this does NOT prevent
 
 - **Duplicates in the destination.** By design. [ADR-002](./002-lsn-gated-upserts.md) absorbs them.
-- **Reordering on rebalance across partitions.** Handled by PK-partitioning (see [ADR-001](./001-kafka-over-rabbitmq.md)) - same PK = same partition = ordered delivery.
+- **Reordering on rebalance across partitions.** Handled by PK-partitioning: same PK = same partition = ordered delivery.
 
 ## Trade-offs we accept
 

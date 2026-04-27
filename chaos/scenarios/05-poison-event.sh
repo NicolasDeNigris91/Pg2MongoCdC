@@ -11,8 +11,8 @@ docker compose exec -T postgres psql -U app -d app -c \
   "INSERT INTO users (email, full_name) VALUES ('chaos5-pre@test.dev', 'Pre-poison') ON CONFLICT DO NOTHING;"
 
 echo "Injecting a 'poison' via extremely long field that likely exceeds downstream limits ..."
-# A real poison event is easier to test from the transformer service (Week 2+)
-# where we control validation. Here we use a 1MB+ value to stress the pipeline.
+# Stress the pipeline with a 1MB+ JSONB value. Real validation happens in
+# the transformer (decoder).
 docker compose exec -T postgres psql -U app -d app -c \
   "INSERT INTO users (email, full_name, profile)
    VALUES ('chaos5-poison@test.dev','Poison',
@@ -35,5 +35,4 @@ docker compose exec -T mongo mongosh --quiet \
 
 echo ""
 echo "Manual assertion: the 'chaos5-post' event should be present in Mongo,"
-echo "proving the poison did NOT block the pipeline. Full automated PASS"
-echo "criterion requires the Week 2 transformer-svc with explicit DLQ routing."
+echo "proving the poison did NOT block the pipeline."

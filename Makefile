@@ -20,7 +20,7 @@ help: ## Show this help
 # Core lifecycle
 # --------------------------------------------------------------------
 .PHONY: demo
-demo: ## Boot the core stack (Week 1), register connectors
+demo: ## Boot the core stack and register connectors
 	@[ -f .env ] || cp .env.example .env
 	$(COMPOSE) up -d --build --wait
 	bash scripts/register-connectors.sh
@@ -86,20 +86,20 @@ show-topics: ## List Kafka topics and recent CDC events
 	bash scripts/show-topics.sh
 
 # --------------------------------------------------------------------
-# Not-yet-implemented phases (placeholders fail loudly instead of silently)
+# Load, chaos, verification
 # --------------------------------------------------------------------
 .PHONY: load
 load: ## Run k6 load test against Postgres (requires docker-compose.chaos.yml up)
 	$(COMPOSE) -f docker-compose.yml -f docker-compose.chaos.yml run --rm k6 run /scripts/write-mix.js
 
 .PHONY: chaos
-chaos: ## Run all 5 chaos scenarios, fail on any failure
+chaos: ## Run all chaos scenarios, fail on any failure
 	bash chaos/run-all.sh
 
 .PHONY: verify
-verify: ## Compare PG ↔ Mongo row counts (Week 2+ adds content checksums)
+verify: ## Compare PG vs Mongo row counts and content hashes
 	bash chaos/verify-integrity.sh
 
 .PHONY: reprocess-dlq
-reprocess-dlq: ## [Week 2+] Replay DLQ topics after human triage
-	@echo "NOT YET IMPLEMENTED — see docs/plan.md Week 2" && exit 1
+reprocess-dlq: ## Replay DLQ topics after triage
+	@echo "NOT YET IMPLEMENTED" && exit 1

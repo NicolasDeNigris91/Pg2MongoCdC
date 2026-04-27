@@ -1,6 +1,4 @@
-# Declarative SQL→Mongo mapping (see ADR-004).
-# Loaded by the transformer service at startup. Adding a new table = adding
-# a file here. No code change required.
+# SQL -> Mongo mapping. Loaded at transformer startup; one file per table.
 
 ruleSchemaVersion: 1
 source: public.users

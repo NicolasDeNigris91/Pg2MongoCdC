@@ -6,7 +6,7 @@
 #   - Prometheus (scrape + alerting)
 #   - Grafana (dashboards provisioned at container start)
 #   - kafka-exporter, postgres-exporter (immediate metrics sources)
-#   - Toxiproxy (network-layer fault injector, ADR-005)
+#   - Toxiproxy (network-layer fault injector)
 #   - k6 (on-demand, via `docker compose run --rm k6`)
 
 name: zdt-migration

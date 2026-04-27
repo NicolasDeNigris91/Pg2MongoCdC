@@ -40,8 +40,8 @@ kafka:
   bootstrapServers: kafka-bootstrap.your-domain.local:9092
   # Secret containing keys: username, password (SASL/SCRAM-SHA-512)
   credentialsSecret: kafka-credentials
-  # Required for Avro envelope evolution (ADR-006). Set to false to use
-  # JsonConverter - simpler, no schema evolution guarantees.
+  # Enables Avro on Connect for wire-level schema evolution. Set to false
+  # to fall back to JsonConverter (no compatibility checks).
   schemaRegistry:
     enabled: true
     url: https://schema-registry.your-domain.local

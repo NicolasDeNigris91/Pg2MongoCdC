@@ -8,12 +8,8 @@ import (
 	"zdt/sink/internal/writer"
 )
 
-// Cycle 5: INSERT decoding. Exercises the payload.op="c" path, extracts PK
-// from the key, LSN from payload.source.lsn, table from payload.source.table,
-// and the full After map. Before must be nil for an insert.
 func TestDecode_Insert(t *testing.T) {
-	// What Debezium actually emits on our stack - peeked from cdc.users with
-	// kafka-console-consumer during Week 1 verification. Shrunk to essentials.
+	// Trimmed Debezium envelope from cdc.users (kafka-console-consumer).
 	key := []byte(`{"schema":{},"payload":{"id":42}}`)
 	value := []byte(`{
 		"schema":{},

@@ -15,20 +15,15 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// Integration test - runs against a live Mongo on localhost:27017 by default.
-// Override with MONGO_URI. Skipped by default; enabled with `-tags integration`.
-//
-// This is the single most important test in the repository: it proves at
-// the DATABASE LEVEL that LSN-gating makes at-least-once delivery safe.
-// Every branch here maps directly to ADR-002.
+// Integration test against a live Mongo. Default URI hits localhost:27017
+// (override with MONGO_URI). Run with `-tags integration`.
 
 func mongoURI() string {
 	if u := os.Getenv("MONGO_URI"); u != "" {
 		return u
 	}
-	// directConnection=true so the driver does NOT follow the replica-set
-	// advertised host (which is the Docker-internal "mongo:27017"). From
-	// the host we reach it via localhost:27017 published by compose.
+	// directConnection=true so the driver doesn't follow the replica-set
+	// advertised host (the docker-internal "mongo:27017").
 	return "mongodb://localhost:27017/?directConnection=true"
 }
 
@@ -46,7 +41,7 @@ func newTestClient(t *testing.T) *mongo.Client {
 	return client
 }
 
-func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
+func TestMongoWriter_LSNGateOrdering(t *testing.T) {
 	ctx := context.Background()
 	client := newTestClient(t)
 	defer func() { _ = client.Disconnect(ctx) }()
@@ -57,7 +52,7 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 	w := writer.NewMongoWriter(client, testDB, 1)
 	coll := client.Database(testDB).Collection("users")
 
-	// 1. First write (INSERT): creates document with sourceLsn=100.
+	// 1. INSERT at LSN=100.
 	ev := writer.CDCEvent{
 		Table: "users", PK: "1", LSN: 100, Op: writer.OpInsert,
 		After: map[string]any{"id": int64(1), "email": "alice@a.b", "name": "Alice"},
@@ -74,8 +69,7 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 		t.Fatalf("doc after insert wrong: %v", doc)
 	}
 
-	// 2. Replay the SAME event (same LSN): must be a no-op - document unchanged.
-	//    This is the at-least-once duplicate-delivery case the LSN gate rejects.
+	// 2. Same-LSN replay: no-op.
 	if err := w.Apply(ctx, ev); err != nil {
 		t.Fatalf("replay: %v", err)
 	}
@@ -85,7 +79,7 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 		t.Errorf("after replay, want 1 doc, got %d", n)
 	}
 
-	// 3. Newer event (UPDATE, LSN=200): must overwrite.
+	// 3. UPDATE at LSN=200: overwrites.
 	ev.LSN = 200
 	ev.Op = writer.OpUpdate
 	ev.After["email"] = "alice@updated.com"
@@ -97,9 +91,7 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 		t.Fatalf("doc after update wrong: %v", doc)
 	}
 
-	// 4. STALE event (LSN=150, smaller than current 200): must NOT overwrite.
-	//    This is the out-of-order replay case - for example, after a DLQ
-	//    reprocess of an older event. ADR-002 demands this be a no-op.
+	// 4. Stale UPDATE at LSN=150 (less than current 200): no-op.
 	ev.LSN = 150
 	ev.After["email"] = "STALE@wrong.com"
 	if err := w.Apply(ctx, ev); err != nil {
@@ -113,7 +105,7 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 		t.Errorf("LSN gate failed: stored sourceLsn should stay 200, got %v", doc["sourceLsn"])
 	}
 
-	// 5. DELETE with current LSN: removes the row.
+	// 5. DELETE at LSN=300: removes the row.
 	ev.LSN = 300
 	ev.Op = writer.OpDelete
 	ev.Before = map[string]any{"id": int64(1)}
@@ -126,8 +118,7 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 		t.Errorf("after delete, want 0 docs, got %d", n)
 	}
 
-	// 6. STALE DELETE after the row is gone AND a newer insert restored it.
-	//    First, simulate a re-insert at LSN=400.
+	// 6. Re-insert at LSN=400, then a stale DELETE (LSN=300) should be a no-op.
 	ev = writer.CDCEvent{
 		Table: "users", PK: "1", LSN: 400, Op: writer.OpInsert,
 		After: map[string]any{"id": int64(1), "email": "alice-v2@a.b"},
@@ -135,7 +126,6 @@ func TestMongoWriter_LSNGateProvesIdempotencyAgainstReplay(t *testing.T) {
 	if err := w.Apply(ctx, ev); err != nil {
 		t.Fatalf("reinsert: %v", err)
 	}
-	// Now replay the OLD delete (LSN=300). Must NOT remove the re-inserted doc.
 	staleDelete := writer.CDCEvent{
 		Table: "users", PK: "1", LSN: 300, Op: writer.OpDelete,
 		Before: map[string]any{"id": int64(1)},

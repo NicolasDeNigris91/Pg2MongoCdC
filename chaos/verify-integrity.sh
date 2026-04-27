@@ -61,9 +61,8 @@ for t in "${TABLES[@]}"; do
   mongo_c=$(mongo_count "$t")
 
   # Canonical checksum: id-sorted rows concatenated into a single string, md5'd.
-  # Note: we do NOT md5 Mongo rows here - document shape differs from PG (by
-  # design, after schema transforms). Full field-level checksum requires the
-  # Go sink's LSN-gated path (Week 2+).
+  # We do NOT md5 Mongo rows here - the document shape differs from PG by
+  # design (post-transform). Full field-level checksum lives in the sink path.
   pg_hash=$(docker compose exec -T postgres psql -U app -d app -tAc \
     "SELECT md5(string_agg(row_repr, ',' ORDER BY id))
      FROM (SELECT id, row_to_json(t)::text AS row_repr FROM ${t} t) s;" \

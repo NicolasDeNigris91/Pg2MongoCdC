@@ -6,7 +6,7 @@
 
 ## Context
 
-Our consumer-commit protocol (ADR-003) intentionally allows at-least-once delivery: a crash between "downstream write succeeded" and "Kafka offset committed" causes the same event to be re-processed on restart. The sink must absorb these duplicates without producing inconsistent state.
+Our consumer-commit protocol (see ADR-003) intentionally allows at-least-once delivery: a crash between "downstream write succeeded" and "Kafka offset committed" causes the same event to be re-processed on restart. The sink must absorb these duplicates without producing inconsistent state.
 
 There are two broad ways to do this:
 
@@ -65,8 +65,8 @@ The integration test in `services/sink/internal/writer/mongo_writer_integration_
 
 ## What this does NOT prevent
 
-- **Logical bugs in the transform rules.** If `profile.embed=true` is flipped to `false` mid-migration, new documents will have a different shape than old ones. LSN-gating is orthogonal to transform-rule changes. Solution: explicit `schemaVersion` field + dual-write window (ADR-006).
-- **Lost writes from Kafka itself.** If the producer side loses an event before Kafka persists it, LSN-gating cannot recover it. Mitigated by `acks=all` + `min.insync.replicas=2` + idempotent producer (ADR-001).
+- **Logical bugs in the transform rules.** If `profile.embed=true` is flipped to `false` mid-migration, new documents will have a different shape than old ones. LSN-gating is orthogonal to transform-rule changes. Solution: explicit `schemaVersion` field + dual-write window.
+- **Lost writes from Kafka itself.** If the producer side loses an event before Kafka persists it, LSN-gating cannot recover it. Mitigated by `acks=all` + `min.insync.replicas=2` + idempotent producer.
 
 ## Trade-offs we accept
 

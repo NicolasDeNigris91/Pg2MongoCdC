@@ -1,14 +1,7 @@
-# Zero-Downtime Migration - local dev stack.
-#
-# Laptop-simplified topology (see CLAUDE.md "Hard invariants #5"):
-#   - 1 Kafka broker in KRaft mode (prod = 3 brokers, RF=3, min.insync.replicas=2)
-#   - 1-node MongoDB replica set (prod = 3-node replica set)
-# These relaxations are dev-only. Topics are created with RF=1 here; the ADR
-# in docs/decisions/001-kafka-over-rabbitmq.md spells out the prod topology.
-#
-# Week 1 walking skeleton: prove INSERT on Postgres → appears in Mongo via
-# Debezium (source) + MongoDB Kafka Connector (sink). Week 2 replaces the
-# off-the-shelf Mongo sink with our own Go service that adds LSN-gating.
+# Local dev stack. Laptop-simplified:
+#   - 1 Kafka broker (KRaft); prod uses 3 brokers, RF=3, min.insync.replicas=2.
+#   - 1-node Mongo replica set; prod uses a 3-node set.
+# See docker-compose.prod.yml for the production reference topology.
 
 name: zdt-migration
 
@@ -142,14 +135,12 @@ services:
       CONFIG_STORAGE_REPLICATION_FACTOR: 1
       OFFSET_STORAGE_REPLICATION_FACTOR: 1
       STATUS_STORAGE_REPLICATION_FACTOR: 1
-      # Week 1 simplification: JsonConverter is built into Kafka Connect.
-      # Avro + Schema Registry flips on in Week 2 (see ADR-006 "Week-1 exception").
+      # JsonConverter for the dev stack; Avro + Schema Registry is a config flip.
       KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
       VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
       CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
       CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "true"
-      # Heartbeat topic so Postgres doesn't recycle WAL during low traffic
-      # (the #1 cause of silent data loss - see CLAUDE.md invariant)
+      # Heartbeat topic so Postgres doesn't recycle WAL during low traffic.
       REST_ADVERTISED_HOST_NAME: connect
       REST_PORT: ${CONNECT_REST_PORT:-8083}
       PLUGIN_PATH: "/kafka/connect"
@@ -186,8 +177,8 @@ services:
     logging: *default-logging
 
   # ------------------------------------------------------------------
-  # Week 4: transformer reads cdc.*, applies YAML rename rules from
-  # schema/transforms/, publishes transformed.*. Destravamos ADR-004.
+  # transformer: reads cdc.*, applies YAML rename rules from
+  # schema/transforms/, publishes transformed.*.
   # ------------------------------------------------------------------
   transformer:
     build:
@@ -216,11 +207,8 @@ services:
     logging: *default-logging
 
   # ------------------------------------------------------------------
-  # Week 2: our own Go sink with commit-after-side-effect + LSN-gated
-  # idempotent upserts. Replaces the off-the-shelf MongoDB Kafka
-  # Connector (which lost 1 row in chaos 01 - see docs/chaos-findings.md).
-  # Week 4: sink now consumes transformed.* instead of cdc.* - the
-  # transformer sits between them and applies YAML rules.
+  # sink: Go service. Consumes transformed.*, batches BulkWrite into Mongo
+  # with LSN-gated upserts. Commits offsets only after the write succeeds.
   # ------------------------------------------------------------------
   sink:
     build:
@@ -251,8 +239,7 @@ services:
     logging: *default-logging
 
   # ------------------------------------------------------------------
-  # Week 3: loadgen sidecar - translates k6 HTTP into Postgres writes.
-  # Stateless, scales trivially via --scale loadgen=N.
+  # loadgen sidecar: translates k6 HTTP calls into Postgres writes.
   # ------------------------------------------------------------------
   loadgen:
     build:

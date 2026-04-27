@@ -22,15 +22,10 @@ kafka-data/
 mongo-data/
 connect-data/
 
-# Editors / OS / local agent state
+# Editors / OS
 .vscode/
 .idea/
 .cursor/
-.aider*
-.claude/
-CLAUDE.md
-AGENTS.md
-GEMINI.md
 *.swp
 .DS_Store
 Thumbs.db

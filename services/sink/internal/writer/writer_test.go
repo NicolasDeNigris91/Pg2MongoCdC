@@ -6,10 +6,7 @@ import (
 	"zdt/sink/internal/writer"
 )
 
-// Cycle 1: the INSERT path. This test encodes the core ADR-002 invariant:
-// every upsert must be LSN-gated so re-delivery of an older event cannot
-// overwrite newer state in Mongo.
-func TestBuildWriteOp_InsertProducesLSNGatedUpsert(t *testing.T) {
+func TestBuildWriteOp_Insert(t *testing.T) {
 	ev := writer.CDCEvent{
 		Table: "users",
 		PK:    "42",
@@ -33,18 +30,16 @@ func TestBuildWriteOp_InsertProducesLSNGatedUpsert(t *testing.T) {
 		t.Errorf("want Upsert=true, got false")
 	}
 
-	// _id must be the namespaced PK so replays target the same document.
 	if got, want := op.Filter["_id"], "users:42"; got != want {
 		t.Errorf("want Filter._id=%q, got %v", want, got)
 	}
 
-	// LSN gate: $or with a $lt clause and an $exists:false clause.
 	orClauses, ok := op.Filter["$or"].([]map[string]any)
 	if !ok {
 		t.Fatalf("want Filter.$or=[]map[string]any, got %T (%v)", op.Filter["$or"], op.Filter["$or"])
 	}
 	if len(orClauses) != 2 {
-		t.Fatalf("want 2 $or clauses (LSN $lt + $exists:false), got %d", len(orClauses))
+		t.Fatalf("want 2 $or clauses, got %d", len(orClauses))
 	}
 	if lt, _ := orClauses[0]["sourceLsn"].(map[string]any); lt["$lt"] != int64(1000) {
 		t.Errorf("want $or[0].sourceLsn.$lt=1000, got %v", orClauses[0])
@@ -53,7 +48,6 @@ func TestBuildWriteOp_InsertProducesLSNGatedUpsert(t *testing.T) {
 		t.Errorf("want $or[1].sourceLsn.$exists=false, got %v", orClauses[1])
 	}
 
-	// $set must contain the mapped fields plus the LSN and schemaVersion markers.
 	set, ok := op.Update["$set"].(map[string]any)
 	if !ok {
 		t.Fatalf("want Update.$set=map, got %T (%v)", op.Update["$set"], op.Update["$set"])
@@ -72,12 +66,7 @@ func TestBuildWriteOp_InsertProducesLSNGatedUpsert(t *testing.T) {
 	}
 }
 
-// Cycle 2: DELETE emits an LSN-gated DeleteOne. The filter uses $lt only
-// (no $exists:false branch) because deleting a row that was never present
-// is a no-op by construction - no need to match the absent-LSN case.
-// This prevents a replayed DELETE from removing a row that was subsequently
-// re-inserted under a higher LSN.
-func TestBuildWriteOp_DeleteProducesLSNGatedDelete(t *testing.T) {
+func TestBuildWriteOp_Delete(t *testing.T) {
 	ev := writer.CDCEvent{
 		Table: "users",
 		PK:    "42",
@@ -109,17 +98,12 @@ func TestBuildWriteOp_DeleteProducesLSNGatedDelete(t *testing.T) {
 	if lt == nil || lt["$lt"] != int64(2000) {
 		t.Errorf("want Filter.sourceLsn.$lt=2000, got %v", op.Filter["sourceLsn"])
 	}
-	// Explicitly: no $or on deletes (no $exists:false branch).
 	if _, hasOr := op.Filter["$or"]; hasOr {
 		t.Errorf("delete filter should not use $or, got %v", op.Filter["$or"])
 	}
 }
 
-// Cycle 3: nil After on a non-delete op is a correctness bug - an upsert
-// with an empty $set would insert a document containing only sourceLsn and
-// schemaVersion on first write, losing all real fields. We reject at the
-// boundary rather than silently produce a malformed write.
-func TestBuildWriteOp_NilAfterOnNonDeleteIsError(t *testing.T) {
+func TestBuildWriteOp_NilAfterErr(t *testing.T) {
 	cases := []struct {
 		name string
 		op   writer.CDCOp

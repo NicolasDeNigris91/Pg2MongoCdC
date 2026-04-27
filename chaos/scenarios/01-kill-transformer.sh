@@ -1,22 +1,17 @@
 #!/usr/bin/env bash
 # PASS: after SIGKILL on the transformer mid-stream, row counts match and
 #       no DLQ entries appear. Recovery completes within 60s of restart.
-#
-# REQUIRES: Week 2+ (transformer-svc container). Until then, this script
-# runs a no-op on the current off-the-shelf Mongo sink connector path
-# (kills the connect container instead - which exercises the same crash-
-# recovery story at a coarser granularity).
 set -euo pipefail
 
 DURATION="${DURATION:-30}"
-# Default to our Week 2 Go sink now that it exists. Override with
-# TARGET=connect to replay the Week 1 baseline (off-the-shelf MongoSinkConnector).
+# TARGET=sink kills the Go sink. TARGET=connect kills Connect (the
+# off-the-shelf MongoSinkConnector path - kept for comparison).
 TARGET="${TARGET:-sink}"
 
 echo "Scenario 01: kill $TARGET mid-stream"
 echo "============================================"
 echo "Starting background load for ${DURATION}s..."
-# Background load - replace with k6 once Week 3 lands
+# Inline psql load. k6 covers the heavier mix in load/k6/.
 (
   for i in $(seq 1 "$DURATION"); do
     docker compose exec -T postgres psql -U app -d app -c \

@@ -9,39 +9,26 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// MongoWriter implements consumer.Writer by dispatching each event to the
-// correct Mongo collection via BulkWrite. The heavy lifting (BuildWriteOp +
-// ToMongoModel) is unit-tested; this struct is a thin composition tested
-// via an integration test in mongo_writer_integration_test.go.
+// MongoWriter dispatches CDC events to Mongo via BulkWrite, one BulkWrite
+// per collection per call.
 type MongoWriter struct {
 	client        *mongo.Client
 	db            string
 	schemaVersion int
 }
 
-// NewMongoWriter returns a writer that upserts into the named database using
-// the provided schema version on every write. The client's lifetime is
-// managed by the caller (main.go wires connect + disconnect with a context).
 func NewMongoWriter(client *mongo.Client, db string, schemaVersion int) *MongoWriter {
 	return &MongoWriter{client: client, db: db, schemaVersion: schemaVersion}
 }
 
-// Apply is a convenience wrapper around ApplyBatch for callers that still
-// want per-record semantics (integration tests, mostly).
 func (m *MongoWriter) Apply(ctx context.Context, ev CDCEvent) error {
 	return m.ApplyBatch(ctx, []CDCEvent{ev})
 }
 
-// ApplyBatch idempotently reflects N CDC events into Mongo in one BulkWrite
-// per collection. LSN-gating in each BuildWriteOp filter makes replayed
-// events no-ops at the database level (ADR-002).
-//
-// E11000 (duplicate key) errors from partial-batch upsert failures are
-// treated as idempotent no-ops: they signal the stale-replay path where a
-// doc already exists with sourceLsn >= ev.LSN and the upsert filter missed.
-// The rest of the BulkWrite continues processing; Mongo's BulkWriteException
-// carries per-record outcomes so we can tell "all E11000" (OK) apart from
-// "real error on at least one record" (return error, whole batch retries).
+// ApplyBatch writes N events in one BulkWrite per collection. LSN gating in
+// the per-op filter makes replays no-ops. A bulk failure that is entirely
+// E11000 is treated as the stale-replay path and ignored; any other error
+// returns and the caller retries the whole batch.
 func (m *MongoWriter) ApplyBatch(ctx context.Context, evs []CDCEvent) error {
 	if len(evs) == 0 {
 		return nil
@@ -70,9 +57,8 @@ func (m *MongoWriter) ApplyBatch(ctx context.Context, evs []CDCEvent) error {
 	return nil
 }
 
-// allDuplicateKey returns true iff every individual error in a bulk failure
-// is E11000. If any non-11000 error is present, the batch is not purely an
-// idempotent-skip situation and the caller must retry.
+// allDuplicateKey reports whether every per-record error in a bulk failure
+// is E11000.
 func allDuplicateKey(err error) bool {
 	var bwe mongo.BulkWriteException
 	if !errors.As(err, &bwe) {

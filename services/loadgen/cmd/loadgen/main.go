@@ -1,7 +1,6 @@
 // Command loadgen is the HTTP sidecar k6 hits to generate INSERT/UPDATE/
-// DELETE load against Postgres. It exists because the k6 script in
-// load/k6/write-mix.js assumes an HTTP API; we translate those calls into
-// SQL via pgx. See docs/plan.md (Week 3) and ADR-005 for the load story.
+// DELETE load against Postgres. The k6 script in load/k6/write-mix.js
+// targets this API; pgx executes the SQL.
 package main
 
 import (
@@ -29,8 +28,6 @@ func main() {
 
 	store, err := db.New(ctx, uri)
 	if err != nil {
-		// Boot-time fatal. Process exit lets the OS reclaim the signal
-		// channel; there is no useful cleanup at this point in startup.
 		log.Fatalf("db: %v", err) //nolint:gocritic
 	}
 	defer store.Close()

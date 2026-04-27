@@ -1,17 +1,10 @@
-// k6 write-mix generator. Targets the sidecar HTTP API (load/k6/server.go, Week 3)
-// OR can use k6's `sql` extension to hit Postgres directly (xk6-sql-postgres).
-// This file uses the HTTP variant because it's the one a recruiter can run
-// without building a custom k6 binary.
+// k6 write-mix generator. Targets the loadgen HTTP API.
 //
 // Run:
-//   k6 run --vus 50 --duration 60s --env BASE=http://localhost:8085 load/k6/write-mix.js
+//   k6 run --vus 50 --duration 60s --env BASE=http://localhost:8086 load/k6/write-mix.js
 //
 // Default mix (override with env vars):
 //   INSERT 70% | UPDATE 20% | DELETE 10%
-//
-// Until the sidecar lands (Week 3), run this against a minimal local HTTP
-// shim that just forwards to psql. A placeholder `load/sidecar/` is on the
-// roadmap in docs/plan.md.
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';

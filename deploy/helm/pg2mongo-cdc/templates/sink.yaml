@@ -121,9 +121,8 @@ spec:
                   matchLabels:
                     {{- include "pg2mongo-cdc.selectorLabels" (list . "sink") | nindent 20 }}
       {{- end }}
-      # Sink commits offsets only after successful Mongo BulkWrite (ADR-003).
-      # On graceful shutdown we want any in-flight batch to drain before
-      # the kubelet sends SIGKILL; 30s is enough for a worst-case batch.
+      # Offsets commit after BulkWrite, so let any in-flight batch drain
+      # before SIGKILL.
       terminationGracePeriodSeconds: 30
 ---
 apiVersion: v1

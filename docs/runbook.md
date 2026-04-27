@@ -51,7 +51,7 @@ The headers include: `__dlq_error_reason`, `__dlq_source_offset`, `__dlq_source_
 **Reprocessing.** Once the root cause is fixed in code / config, replay:
 
 ```bash
-./scripts/reprocess-dlq.sh dlq.source      # Week 2+: reads, re-validates, re-produces
+./scripts/reprocess-dlq.sh dlq.source      # reads, re-validates, re-produces
 ```
 
 Never `kafka-console-producer` the old event back verbatim - it will fail the same way.
@@ -62,12 +62,12 @@ Never `kafka-console-producer` the old event back verbatim - it will fail the sa
 
 **Symptom.** `migration_checkpoint_staleness_seconds > 60` for 2 minutes.
 
-This only fires once the Week 2 sink-svc is running and writing `_migration_checkpoints` docs to Mongo. It means either:
+Fires when `sink-svc` has stopped writing `_migration_checkpoints` docs. It usually means either:
 
-- The sink process is alive but its main consume loop has stalled (thread deadlock, blocked Mongo write).
+- The sink process is alive but its consume loop has stalled (deadlock, blocked Mongo write).
 - The clock on the sink host is skewed forward.
 
-**First move.** `docker compose logs sink | tail -200` and look for repeated errors around `BulkWrite`. If logs are silent but the process is up, check thread dumps (Week 2 service exposes `/debug/pprof`).
+**First move.** `docker compose logs sink | tail -200` and look for repeated errors around `BulkWrite`. If logs are silent but the process is up, check the goroutine dump at `/debug/pprof`.
 
 ---
 

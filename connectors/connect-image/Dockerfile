@@ -1,9 +1,5 @@
-# Extends Debezium's Kafka Connect image with the MongoDB Kafka Connector.
-#
-# NOTE on Avro converter: Week 1 uses JsonConverter (built into Kafka Connect,
-# zero extra deps) to keep the walking skeleton fast to boot. Avro +
-# Confluent Schema Registry are documented as the target wire format in
-# ADR-006 and will land when we control the sink ourselves in Week 2.
+# Debezium Connect + MongoDB Kafka Connector. Wire format is JsonConverter;
+# Avro + Schema Registry is a Connect-config flip when needed.
 
 FROM debezium/connect:2.6
 

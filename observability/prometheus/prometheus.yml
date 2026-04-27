@@ -27,7 +27,7 @@ scrape_configs:
   # - job_name: connect
   #   static_configs: [{ targets: ["connect:5556"] }]
 
-  # Week 2+ - our own Go services expose /metrics.
+  # Go services expose /metrics.
   - job_name: transformer
     static_configs:
       - targets: ["transformer:8080"]

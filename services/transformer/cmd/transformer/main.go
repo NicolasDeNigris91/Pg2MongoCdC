@@ -1,13 +1,7 @@
-// Command transformer reads CDC events from `cdc.*`, applies YAML-declarative
-// field renames per schema/transforms/, and publishes to `transformed.*`.
-// The Go sink downstream consumes `transformed.*` instead of `cdc.*`, so
-// documents land in Mongo with their target shape (ADR-004).
-//
-// Consume-transform-produce loop uses franz-go for both sides and commits
-// offsets only AFTER the produce is ack'd (ADR-003 again). A failure on
-// produce leaves the offset uncommitted and the message is redelivered;
-// idempotency is guaranteed downstream by the sink's LSN gate (ADR-002),
-// so a produced-but-not-committed duplicate is absorbed as a no-op.
+// Command transformer reads CDC events from `cdc.*`, rewrites field names
+// per schema/transforms/<table>.yml, and publishes to `transformed.*`.
+// Offsets commit only after produce is ack'd; redelivery on failure is a
+// no-op downstream because the sink's LSN gate absorbs duplicates.
 package main
 
 import (
@@ -55,17 +49,12 @@ func main() {
 		kgo.MetadataMaxAge(10*time.Second),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
 		kgo.ProducerBatchMaxBytes(16*1024*1024),
-		// Set the auto-create flag on metadata + produce requests. Without
-		// this, producing to a not-yet-existent transformed.<table> topic
-		// hangs ProduceSync indefinitely on KRaft brokers (cp-kafka 7.6.1+),
-		// even with broker-side auto.create.topics.enable=true. The broker
-		// only auto-creates when it sees a request that explicitly asks for
-		// it. See investigation in commit history (round 2 of v1 polish).
+		// On KRaft brokers (cp-kafka 7.6.1+), producing to a not-yet-existent
+		// topic hangs ProduceSync forever unless the request itself flags
+		// auto-creation, even with broker-side auto.create.topics.enable=true.
 		kgo.AllowAutoTopicCreation(),
 	)
 	if err != nil {
-		// Boot-time fatal. Process exit lets the OS reclaim the signal
-		// notification channel; there is no useful cleanup to run yet.
 		log.Fatalf("kgo.NewClient: %v", err) //nolint:gocritic
 	}
 	defer client.Close()

@@ -8,7 +8,7 @@
 --   2. Create a dedicated replication role for Debezium with the minimum
 --      privileges needed (REPLICATION + SELECT on target tables).
 --   3. Pre-create a publication so Debezium does not need CREATE privilege
---      on the database (least-privilege pattern from ADR-001).
+--      on the database.
 
 BEGIN;
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PASS: primary stepdown during load causes sink to retry; no data lost;
-#       checkpoint doc (Week 2+) shows monotonic progress after recovery.
+#       checkpoint doc shows monotonic progress after recovery.
 set -euo pipefail
 
 DURATION="${DURATION:-20}"

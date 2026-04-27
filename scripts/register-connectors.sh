@@ -56,11 +56,9 @@ register_one() {
 
 register_one "zdt-postgres-source" "$ROOT/connectors/debezium-postgres.json"
 
-# As of Week 2, the Mongo sink is our own Go service (services/sink/). The
-# off-the-shelf MongoDB Kafka Connector is kept on disk at
-# connectors/mongo-sink.json for historical comparison (chaos 01 lost 1
-# row against it - see docs/chaos-findings.md). To register the baseline
-# explicitly, set REGISTER_OFFSHELF_SINK=1.
+# The Mongo sink is the Go service in services/sink/. The off-the-shelf
+# MongoDB Kafka Connector at connectors/mongo-sink.json is kept for
+# comparison; set REGISTER_OFFSHELF_SINK=1 to register it instead.
 if [ "${REGISTER_OFFSHELF_SINK:-0}" = "1" ]; then
   register_one "zdt-mongo-sink" "$ROOT/connectors/mongo-sink.json"
 else
