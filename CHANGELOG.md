@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(Nothing yet — file open for the next change.)
+(Nothing yet - file open for the next change.)
 
 ---
 
-## [1.0.0] — 2026-04-21
+## [1.0.0] - 2026-04-21
 
 First production-shaped release.
 
@@ -27,10 +27,10 @@ First production-shaped release.
   (HIGH+CRITICAL severity, fail the build).
 - Go source security scan (gosec) in CI for all three services.
 - Operator handbook documentation:
-  - [`docs/deployment.md`](./docs/deployment.md) — Kubernetes deployment guide.
-  - [`docs/operations.md`](./docs/operations.md) — Day-to-day operations.
-  - [`docs/security.md`](./docs/security.md) — Threat model + secrets management.
-  - [`docs/slo.md`](./docs/slo.md) — SLI/SLO definitions and error budgets.
+  - [`docs/deployment.md`](./docs/deployment.md) - Kubernetes deployment guide.
+  - [`docs/operations.md`](./docs/operations.md) - Day-to-day operations.
+  - [`docs/security.md`](./docs/security.md) - Threat model + secrets management.
+  - [`docs/slo.md`](./docs/slo.md) - SLI/SLO definitions and error budgets.
 - **Helm chart** at [`deploy/helm/pg2mongo-cdc/`](./deploy/helm/pg2mongo-cdc/)
   for production Kubernetes deployment. Includes Deployments + Services for
   Connect, transformer, sink; HPAs keyed on consumer-group lag; NetworkPolicies
@@ -69,7 +69,7 @@ First production-shaped release.
 
 ---
 
-## [1.0.0-pre] — pre-release walking skeleton (2026-04-20)
+## [1.0.0-pre] - pre-release walking skeleton (2026-04-20)
 
 Initial shipping milestone: a Postgres→MongoDB CDC pipeline with
 idempotent LSN-gated sink, YAML-driven schema transformation, a 5-scenario
@@ -100,13 +100,13 @@ table.
 - **Prometheus metrics** from the sink (`migration_events_processed_total`,
   error counters). Grafana dashboard JSON under `observability/grafana/`.
 - **Toxiproxy wiring** for reproducible Kafka network chaos (ADR-005).
-- **Architecture Decision Records** under `docs/decisions/` — six ADRs
+- **Architecture Decision Records** under `docs/decisions/` - six ADRs
   covering Kafka choice, LSN gating, commit ordering, YAML transforms,
   Toxiproxy, and schema registry strategy.
 
 ### Architecture Invariants
 
-Documented in [`CLAUDE.md`](./CLAUDE.md):
+Documented in [`docs/invariants.md`](./docs/invariants.md):
 
 1. Partition key = source primary key.
 2. Commit-after-side-effect.

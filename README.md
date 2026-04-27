@@ -14,13 +14,13 @@
 
 ## The 90-second pitch
 
-**Problem.** Moving a live Postgres table to MongoDB without stopping writes is the hardest problem in data platform engineering. Dual-writes drift. Batch ETL misses writes during cutover. The only correct answer is CDC — and getting CDC *correct* under failure requires solving five sub-problems that most tutorials skip:
+**Problem.** Moving a live Postgres table to MongoDB without stopping writes is the hardest problem in data platform engineering. Dual-writes drift. Batch ETL misses writes during cutover. The only correct answer is CDC - and getting CDC *correct* under failure requires solving five sub-problems that most tutorials skip:
 
 1. No message loss across broker, consumer, or sink crashes.
 2. Checkpointing so a crashed service resumes exactly where it stopped.
 3. Idempotent sinks so at-least-once delivery doesn't corrupt the destination.
 4. Schema evolution without pipeline downtime.
-5. **Measured** resilience — prove it under failure, don't just claim it.
+5. **Measured** resilience - prove it under failure, don't just claim it.
 
 **What's in here.** A reproducible stack that solves all five, with every claim backed by a chaos-suite number.
 
@@ -39,7 +39,7 @@ cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d --build --wait
 bash scripts/register-connectors.sh
 
-# Write path proof — renamed fields land in Mongo as the YAML rule said
+# Write path proof - renamed fields land in Mongo as the YAML rule said
 bash scripts/seed.sh
 # -> 'users:1' doc has fullName, createdAt, isActive, sourceLsn, schemaVersion
 
@@ -62,11 +62,11 @@ Full logs and methodology: [docs/chaos-findings.md](./docs/chaos-findings.md).
 
 | Scenario | Week 1 baseline (off-the-shelf sink) | Week 2-4 (Go stack) |
 |---|---|---|
-| 03 — Mongo primary stepdown | **PASS** | **PASS** |
-| 04 — Postgres WAL pressure (2-min Connect pause) | **PASS** | **PASS** |
-| 05 — Poison event (1MB JSONB blob) | **PASS** | **PASS** |
-| 02 — Kafka network partition (Toxiproxy: 500ms latency + 10% loss × 30s) | *toothless* | **PASS** |
-| 01 — Kill sink mid-stream (× 4 consecutive) | **FAIL** (1 row lost) | **PASS** (0 loss, 0 dup) |
+| 03 - Mongo primary stepdown | **PASS** | **PASS** |
+| 04 - Postgres WAL pressure (2-min Connect pause) | **PASS** | **PASS** |
+| 05 - Poison event (1MB JSONB blob) | **PASS** | **PASS** |
+| 02 - Kafka network partition (Toxiproxy: 500ms latency + 10% loss × 30s) | *toothless* | **PASS** |
+| 01 - Kill sink mid-stream (× 4 consecutive) | **FAIL** (1 row lost) | **PASS** (0 loss, 0 dup) |
 
 | Perf | Before batching fix | After batching fix |
 |---|---|---|
@@ -109,7 +109,7 @@ Every architectural choice is an ADR under [docs/decisions/](./docs/decisions/).
 
 - **Distributed systems reasoning.** Partition ordering, consumer-group semantics, WAL internals, LSN monotonicity.
 - **Production SRE instincts.** Golden signals, SLOs, runbooks, chaos-as-CI, "I found my own bug and fixed it" (see the MarkCommitOffsets story in chaos-findings).
-- **Pragmatic architecture.** Two-service split (transformer + sink) — neither monolith nor microservice sprawl. Three Go services total; nothing more.
+- **Pragmatic architecture.** Two-service split (transformer + sink) - neither monolith nor microservice sprawl. Three Go services total; nothing more.
 - **Data modeling.** Relational → document with schema evolution via declarative YAML rules, not per-table code.
 - **Test discipline.** 17 unit tests (TDD, red-green-refactor visible in commit history) + 1 integration test against live Mongo (6 ordering cases for LSN gate) + 4 chaos scenarios + GitHub Actions CI wiring it all together.
 
@@ -117,8 +117,8 @@ Every architectural choice is an ADR under [docs/decisions/](./docs/decisions/).
 
 - **No multi-region.** Single-DC demo. Real prod needs MirrorMaker 2 and tombstone-aware cross-region replication. Doubles infra scope, adds nothing to the core story.
 - **No Kafka transactions across heterogeneous sinks.** 2PC between Kafka and Mongo doesn't compose. Idempotent sink is the correct pattern. ADR-002 explains.
-- **Laptop-simplified Mongo.** Single-node replica set in dev compose, not a 3-node set. Noted in [CLAUDE.md](./CLAUDE.md).
-- **JsonConverter instead of Avro+Schema Registry for wire format.** Week-4 simplification — Schema Registry still runs but is unused. ADR-006 documents the flip-on path.
+- **Laptop-simplified Mongo.** Single-node replica set in dev compose, not a 3-node set. Noted in [docs/invariants.md](./docs/invariants.md).
+- **JsonConverter instead of Avro+Schema Registry for wire format.** Week-4 simplification - Schema Registry still runs but is unused. ADR-006 documents the flip-on path.
 - **No DLQ web UI.** `make reprocess-dlq` is sufficient for a portfolio demo.
 - **Secrets via `.env`.** Real prod needs Vault/SSM. Out of scope.
 
@@ -132,7 +132,7 @@ A senior engineer knows what NOT to build. These omissions are signals, not gaps
 | `make` (optional) | macOS/Linux preinstalled. Windows: `choco install make` or use the raw `docker compose …` commands |
 | `jq`, `curl` | Usually preinstalled; on Windows `choco install jq` |
 | Go 1.22+ (only to rebuild services or run `go test` locally) | <https://go.dev/dl/> |
-| k6 (optional — dockerised via chaos overlay) | <https://k6.io/docs/get-started/installation/> |
+| k6 (optional - dockerised via chaos overlay) | <https://k6.io/docs/get-started/installation/> |
 
 ## Production deployment
 
@@ -140,14 +140,14 @@ The `docker-compose.yml` in the repo root is for local development; it
 deliberately violates several production invariants for laptop reasons.
 Two artifacts ship with the v1.0 release for real deployments:
 
-- **Helm chart** at [`deploy/helm/pg2mongo-cdc/`](./deploy/helm/pg2mongo-cdc/) — deploys
+- **Helm chart** at [`deploy/helm/pg2mongo-cdc/`](./deploy/helm/pg2mongo-cdc/) - deploys
   the three pipeline workers (Connect, transformer, sink) to Kubernetes.
   Includes HPAs keyed on consumer-group lag, network policies, PodMonitor
   for prometheus-operator, anti-affinity, and locked-down pod security
   context. Data plane (Postgres / Kafka / Mongo / Schema Registry) is
-  expected to come from managed services or separate operators — see
+  expected to come from managed services or separate operators - see
   [`docs/deployment.md`](./docs/deployment.md).
-- **`docker-compose.prod.yml`** — declarative reference of the
+- **`docker-compose.prod.yml`** - declarative reference of the
   production data-plane topology (Kafka RF=3 + ISR=2, 3-node Mongo
   replica set, Postgres with `wal_level=logical` and WAL archive).
   Not meant to run on a laptop; intended as a diffable spec.
@@ -165,22 +165,22 @@ and [docs/plan.md](./docs/plan.md) for per-phase exit criteria.
 
 **Known limitations** (see the "Trade-offs" section above):
 - Single-DC demo. Multi-region would require MirrorMaker 2 (out of scope).
-- Dev compose relaxes `min.insync.replicas=2` / `RF=3` for laptop resource reasons. Production compose restores them; see [CLAUDE.md](./CLAUDE.md).
+- Dev compose relaxes `min.insync.replicas=2` / `RF=3` for laptop resource reasons. Production compose restores them; see [docs/invariants.md](./docs/invariants.md).
 - Secrets via `.env` for local dev only. Production requires Vault / AWS Secrets Manager / External Secrets. See [SECURITY.md](./SECURITY.md).
 
 ## Documentation
 
-- [docs/architecture.md](./docs/architecture.md) — Component diagram and data flow.
-- [docs/deployment.md](./docs/deployment.md) — Production deployment to Kubernetes (Helm), pre-requisites, secrets.
-- [docs/operations.md](./docs/operations.md) — Day-to-day ops: deploys, scaling, capacity, incident response.
-- [docs/runbook.md](./docs/runbook.md) — Per-alert response procedures.
-- [docs/security.md](./docs/security.md) — Threat model, defense-in-depth, secrets management.
-- [docs/slo.md](./docs/slo.md) — SLI / SLO definitions and error budgets.
-- [docs/chaos-findings.md](./docs/chaos-findings.md) — Chaos suite findings in `Finding → Fix → Re-measure` format.
-- [docs/plan.md](./docs/plan.md) — Per-phase delivery plan and exit criteria.
-- [docs/decisions/](./docs/decisions/) — Architecture Decision Records.
-- [CHANGELOG.md](./CHANGELOG.md) — Version history (Keep a Changelog format).
-- [SECURITY.md](./SECURITY.md) — Vulnerability disclosure process.
+- [docs/architecture.md](./docs/architecture.md) - Component diagram and data flow.
+- [docs/deployment.md](./docs/deployment.md) - Production deployment to Kubernetes (Helm), pre-requisites, secrets.
+- [docs/operations.md](./docs/operations.md) - Day-to-day ops: deploys, scaling, capacity, incident response.
+- [docs/runbook.md](./docs/runbook.md) - Per-alert response procedures.
+- [docs/security.md](./docs/security.md) - Threat model, defense-in-depth, secrets management.
+- [docs/slo.md](./docs/slo.md) - SLI / SLO definitions and error budgets.
+- [docs/chaos-findings.md](./docs/chaos-findings.md) - Chaos suite findings in `Finding → Fix → Re-measure` format.
+- [docs/plan.md](./docs/plan.md) - Per-phase delivery plan and exit criteria.
+- [docs/decisions/](./docs/decisions/) - Architecture Decision Records.
+- [CHANGELOG.md](./CHANGELOG.md) - Version history (Keep a Changelog format).
+- [SECURITY.md](./SECURITY.md) - Vulnerability disclosure process.
 
 ## Security
 
@@ -192,4 +192,4 @@ Issues and pull requests welcome. Conventional Commits format expected on commit
 
 ## License
 
-[MIT](./LICENSE) — see the file for the full text.
+[MIT](./LICENSE) - see the file for the full text.

@@ -2,7 +2,7 @@
 
 How to deploy pg2mongo-cdc to a real environment. The dev `docker-compose.yml`
 in the repo root is for local development and explicitly violates several
-production invariants for laptop resource reasons (see [`CLAUDE.md`](../CLAUDE.md));
+production invariants for laptop resource reasons (see [`docs/invariants.md`](./invariants.md));
 this document is the production path.
 
 > **Audience.** Platform engineer doing the first deployment to a
@@ -18,7 +18,7 @@ this document is the production path.
 | Component | Minimum | Recommended | Why |
 |---|---|---|---|
 | Postgres | 14 with `wal_level=logical` | 16, managed (RDS / Cloud SQL / Supabase Pro) | Logical replication slot is the source of truth. Managed Postgres handles backup, PITR, and failover. |
-| Kafka | 3 brokers, RF=3, `min.insync.replicas=2` | Confluent Cloud / MSK / Aiven, or self-hosted Strimzi | Production invariant #5 in CLAUDE.md. |
+| Kafka | 3 brokers, RF=3, `min.insync.replicas=2` | Confluent Cloud / MSK / Aiven, or self-hosted Strimzi | Production invariant #5 in docs/invariants.md. |
 | Schema Registry | One instance reachable from Connect | Confluent Schema Registry, Apicurio, or Aiven | Required for Avro envelope evolution (ADR-006). |
 | MongoDB | Replica set of 3 (`writeConcern: majority`) | Atlas M30+, or self-managed RS with `writeConcern: majority` and `readConcern: majority` | Idempotency requires linearizable reads after writes. |
 | Kubernetes | 1.28+ | 1.30+ with HPA v2 | Sink and transformer are stateless; HPA scales them on partition lag. |
@@ -84,7 +84,7 @@ psql -h <pg-host> -U postgres -d <db> -f schema/postgres/001_init.sql
 ```
 
 The init file creates the `debezium` role with `LOGIN REPLICATION` and
-`SELECT` on the source tables — no other privilege.
+`SELECT` on the source tables - no other privilege.
 
 ### 2. Build and push images
 
@@ -100,7 +100,7 @@ for svc in transformer sink; do
   docker push "$REGISTRY/pg2mongo-cdc-$svc:$TAG"
 done
 
-# Connect image (Debezium + plugins) — separate Dockerfile
+# Connect image (Debezium + plugins) - separate Dockerfile
 docker build -t "$REGISTRY/pg2mongo-cdc-connect:$TAG" "./connectors/connect-image"
 docker push "$REGISTRY/pg2mongo-cdc-connect:$TAG"
 ```
@@ -125,7 +125,7 @@ Provisioning patterns:
   Secret Manager is the recommended pattern. Define `SecretStore`
   pointing at your secret backend, then `ExternalSecret` resources
   per consumer.
-- **Sealed Secrets** is acceptable for smaller deployments — secrets
+- **Sealed Secrets** is acceptable for smaller deployments - secrets
   are encrypted in git, decrypted by the controller in-cluster.
 - **Plain `kubectl create secret`** is acceptable for initial
   bootstrap only. Document who has the key material out-of-band.
@@ -267,13 +267,13 @@ is operational, not architectural.
 
 ## Production MongoDB options
 
-- **MongoDB Atlas** (M30 or higher) — managed RS, automated backups,
+- **MongoDB Atlas** (M30 or higher) - managed RS, automated backups,
   encryption at rest, `writeConcern: majority` available.
-- **DocumentDB on AWS** — Mongo-compatible but with caveats; verify
+- **DocumentDB on AWS** - Mongo-compatible but with caveats; verify
   the LSN gate's `$or: [{$lt}, {$exists:false}]` filter behaves
   correctly under load.
 - **Self-managed Mongo on Kubernetes** via the MongoDB Community
-  Operator — full control, more ops.
+  Operator - full control, more ops.
 
 ## Sharding (when single replica set isn't enough)
 

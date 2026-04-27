@@ -50,7 +50,7 @@ In scope:
 Out of scope (report upstream instead):
 
 - Vulnerabilities in Debezium, Kafka, MongoDB, Postgres, or
-  third-party Go modules — report to their respective projects.
+  third-party Go modules - report to their respective projects.
 - Denial-of-service by overwhelming an un-rate-limited demo instance
   that a user chose to deploy publicly. Production deployments are
   expected to add an upstream rate limit; see
@@ -63,7 +63,7 @@ configuration. It deliberately violates some production invariants
 (e.g. single-broker Kafka, plaintext SASL) for laptop reproducibility.
 Before deploying to a network others can reach, review:
 
-- Secrets management — the `.env` pattern is for local development only.
+- Secrets management - the `.env` pattern is for local development only.
   Production must use Vault / AWS Secrets Manager / External Secrets.
 - mTLS + SASL on Kafka.
 - TLS + authenticated replica set on MongoDB.
@@ -71,5 +71,5 @@ Before deploying to a network others can reach, review:
 - Network isolation: neither Postgres, Kafka, Connect, nor MongoDB should
   be reachable from the public internet.
 
-See [`CLAUDE.md`](./CLAUDE.md) for the full list of production invariants
-the demo compose relaxes.
+See [`docs/invariants.md`](./docs/invariants.md) for the full list of
+production invariants the demo compose relaxes.

@@ -16,7 +16,7 @@ target allows us to spend before it constrains feature work).
 |---|---|---|---|
 | Replication lag | 99% of events propagate PG → Mongo in < 5 s | 30 days rolling | 1% × 30d × 86400s ≈ 25,920 s of "lag > 5s" allowed |
 | Pipeline availability | 99.9% of minutes have at least one successful sink batch | 30 days rolling | 0.1% × 30d × 1440 min = 43.2 min/month of zero-progress allowed |
-| Data integrity | 100% of `verify-integrity.sh` runs return `INTEGRITY OK` | continuous | 0 — any drift is a P1 incident, no budget |
+| Data integrity | 100% of `verify-integrity.sh` runs return `INTEGRITY OK` | continuous | 0 - any drift is a P1 incident, no budget |
 | Sink write success rate | 99.95% of attempted Mongo writes succeed | 30 days rolling | 0.05% × `total_writes` failures budgeted |
 
 The integrity SLO has zero budget because data drift is the
@@ -40,7 +40,7 @@ on each successful write as `now() - event.source_ts_ms / 1000`.
 
 **Why p99, not p95.** A p95 SLO masks the worst 5% of events
 indefinitely. For CDC, the worst 5% can include exactly the events
-that matter — an UPDATE to the row a user is actively reading.
+that matter - an UPDATE to the row a user is actively reading.
 p99 keeps the tail under the SLO too. p99.9 is overkill at
 demo scale; revisit at >10k events/sec.
 
@@ -62,7 +62,7 @@ upstream Postgres idle, Kafka outage).
 
 This SLI is honest about end-to-end behavior. A sink that's "alive"
 (container healthy) but processing zero events is not available by
-this definition. That alignment is the whole point — see the v1.0-polish
+this definition. That alignment is the whole point - see the v1.0-polish
 finding in [chaos-findings.md](./chaos-findings.md) for the
 silent-cold-start failure mode this SLI would have caught
 immediately.
@@ -70,7 +70,7 @@ immediately.
 ### Data integrity
 
 `bash chaos/verify-integrity.sh` returning exit 0 (`INTEGRITY OK`)
-on a quiesced pipeline — meaning per-table row counts match between
+on a quiesced pipeline - meaning per-table row counts match between
 Postgres and Mongo, and the per-row content checksum matches.
 
 Continuous measurement is impractical (the verify script is
@@ -81,7 +81,7 @@ expensive on large tables), so we run it:
   sample of the largest tables.
 - On demand after every deploy that touches the sink.
 
-A single `INTEGRITY FAILED` is a P1 incident — page immediately,
+A single `INTEGRITY FAILED` is a P1 incident - page immediately,
 all-hands. Never silent-fail a drift detection.
 
 ### Sink write success rate
@@ -106,9 +106,9 @@ The budget is consumed minute-by-minute by SLO violations. Once
 
 | % budget consumed | Effect |
 |---|---|
-| 0 – 50% | Normal operation. Feature work proceeds. |
-| 50 – 80% | Risky changes (sink internals, Kafka topic config, schema migrations) require explicit approval. |
-| 80 – 100% | Feature work halts. All effort goes to reliability. Postmortems delivered for every consumed budget incident. |
+| 0 - 50% | Normal operation. Feature work proceeds. |
+| 50 - 80% | Risky changes (sink internals, Kafka topic config, schema migrations) require explicit approval. |
+| 80 - 100% | Feature work halts. All effort goes to reliability. Postmortems delivered for every consumed budget incident. |
 | > 100% | SLO violation. Postmortem delivered to stakeholders. Reliability investment plan delivered next cycle. |
 
 Note: the "data integrity" SLO has no budget. Even one minute of
@@ -125,9 +125,9 @@ For the replication lag SLO (1% over 30 days = 0.0036% per hour):
 
 | Burn rate | Window | Alert |
 |---|---|---|
-| 14.4× | 1h | P1 — paging. The hourly rate alone burns 24h of budget per hour. |
-| 6× | 6h | P2 — page on-call. Sustained, will burn ~30% of monthly budget if uncorrected. |
-| 1× | 30d | (no alert — this is the SLO breaking exactly on schedule) |
+| 14.4× | 1h | P1 - paging. The hourly rate alone burns 24h of budget per hour. |
+| 6× | 6h | P2 - page on-call. Sustained, will burn ~30% of monthly budget if uncorrected. |
+| 1× | 30d | (no alert - this is the SLO breaking exactly on schedule) |
 
 Rules in `observability/prometheus/alerts.yml` implement these.
 
@@ -153,7 +153,7 @@ A useful distinction:
 - **Invariants are not budgeted.** They cannot be violated even
   once.
 
-Invariants for this pipeline live in [`CLAUDE.md`](../CLAUDE.md):
+Invariants for this pipeline live in [`docs/invariants.md`](./invariants.md):
 
 1. Partition key = source PK (no overtake).
 2. Commit-after-side-effect.
@@ -163,7 +163,7 @@ Invariants for this pipeline live in [`CLAUDE.md`](../CLAUDE.md):
 6. DLQ is write-only from services.
 
 A violation of any of these is by definition a P1 incident with
-zero budget — same severity as the integrity SLO.
+zero budget - same severity as the integrity SLO.
 
 ## Choice of measurement window
 
@@ -171,14 +171,14 @@ zero budget — same severity as the integrity SLO.
 (7 days) is faster signal, more reactive ops. The argument for
 longer (90 days) is less false alarm during one bad week.
 
-For this pipeline at this scale, 30 days is the right balance —
+For this pipeline at this scale, 30 days is the right balance -
 long enough that one bad day doesn't trigger panic, short enough
 that systemic regressions become visible within a single quarter.
 
 ## What this doc does NOT cover
 
-- The actual Grafana dashboard implementing these SLIs — that lives
+- The actual Grafana dashboard implementing these SLIs - that lives
   in `observability/grafana/migration-overview.json`.
-- The Prometheus alert rules — `observability/prometheus/alerts.yml`.
-- Per-alert response procedures — [`runbook.md`](./runbook.md).
-- Day-to-day operations — [`operations.md`](./operations.md).
+- The Prometheus alert rules - `observability/prometheus/alerts.yml`.
+- Per-alert response procedures - [`runbook.md`](./runbook.md).
+- Day-to-day operations - [`operations.md`](./operations.md).
